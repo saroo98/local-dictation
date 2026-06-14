@@ -47,14 +47,14 @@ PASTED_LABEL = "\u2713"
 EMPTY_LABEL = "-"
 ERROR_LABEL = "!"
 
-# Bubble colors.
+# Bubble colors. Calm, slightly muted palette for a modern minimal look.
 READY_BG = "#1f6f4a"
-RECORDING_BG = "#c3322b"
-TRANSCRIBING_BG = "#fbbc04"
-PASTE_READY_BG = "#1967d2"
+RECORDING_BG = "#cf4b41"
+TRANSCRIBING_BG = "#e0a526"
+PASTE_READY_BG = "#2b6fd6"
 PASTED_BG = "#188038"
 EMPTY_BG = "#5f6368"
-ERROR_BG = "#a50e0e"
+ERROR_BG = "#b4503f"
 
 # Timing and filtering.
 PASTE_DELAY_SECONDS = 0.35
@@ -68,6 +68,11 @@ ERROR_STATE_SECONDS = 1.5
 # Recording is manual-stop only: click M to start, click red R to stop.
 # Target clicks while recording should not stop recording.
 ENABLE_FAST_TARGET_CLICK_PASTE = False
+# When the focused control is an editable text field (chat box, editor, etc.),
+# paste automatically as soon as transcription finishes. Otherwise fall back to
+# the click-a-field flow. The bubble is a no-activate window so it never steals
+# focus from that field.
+AUTO_PASTE_WHEN_EDITABLE = True
 ENABLE_TEXT_CLEANUP = True
 SAVE_TRANSCRIPT_HISTORY = True
 TRANSCRIPT_HISTORY_LIMIT = 5
@@ -103,3 +108,13 @@ SESSION_LOG_KEEP_COUNT = 100
 DEBUG_LOG_BUBBLE_STATES = True
 DEBUG_LOG_AUDIO_FIRST_CALLBACK = True
 DEBUG_LOG_AUDIO_EVERY_N_CALLBACKS = 100
+
+# Runtime, user-editable settings file (written by the Settings panel).
+SETTINGS_FILE = Path(r"C:\local-dictation\settings.json")
+
+# Opacity bounds for the panels (percent).
+OPACITY_MIN = 70
+OPACITY_MAX = 100
+
+# Privacy: transcript text is NOT written to logs unless this is True.
+LOG_TRANSCRIPT_TEXT = False
