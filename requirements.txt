@@ -1,0 +1,10 @@
+faster-whisper
+sounddevice
+numpy
+pyperclip
+pyautogui
+pynput
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+nvidia-cuda-runtime-cu12
+nvidia-cuda-nvrtc-cu12
