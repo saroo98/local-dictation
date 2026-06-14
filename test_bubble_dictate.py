@@ -116,6 +116,12 @@ class TextCleanupTests(unittest.TestCase):
             "First line\nSecond line\n\nThird",
         )
 
+    def test_clean_transcript_text_skips_spoken_punctuation_for_non_english(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("کاما comma", language="fa"),
+            "کاما comma",
+        )
+
 
 class CliControlTests(unittest.TestCase):
     def test_parse_cli_action_detects_toggle_record(self) -> None:
@@ -541,6 +547,73 @@ class LaunchLockTests(unittest.TestCase):
                 )
             )
             self.assertIn("pid=2", lock_path.read_text(encoding="utf-8"))
+
+
+class SafeConsolePrintTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.session_log_file = None
+
+    def test_log_survives_console_unicode_encode_error(self) -> None:
+        # Simulate a cp1252 console that cannot encode the paste check mark,
+        # which previously raised out of set_bubble and flipped the bubble
+        # into the error state after a successful paste.
+        def raising_print(*_args, **_kwargs):
+            raise UnicodeEncodeError("charmap", "✓", 0, 1, "undefined")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            legacy_log = Path(temp_dir) / "dictation_debug.log"
+
+            with patch("builtins.print", raising_print):
+                try:
+                    bubble_dictate.log(
+                        "Bubble state requested: text=✓ bg=#188038",
+                        legacy_log_file=legacy_log,
+                    )
+                except UnicodeEncodeError:
+                    self.fail("log() must not raise when the console cannot encode a glyph")
+
+            self.assertIn("✓", legacy_log.read_text(encoding="utf-8"))
+
+
+class BubbleErrorGlyphTests(unittest.TestCase):
+    def test_error_label_does_not_fall_back_to_text_icon(self) -> None:
+        # The error state is drawn as a vector glyph, not the generic text path.
+        self.assertEqual(
+            bubble_dictate.bubble_icon_for_state(bubble_dictate.config.ERROR_LABEL),
+            "text",
+        )
+
+    def test_lighten_color_returns_lighter_hex(self) -> None:
+        lighter = bubble_dictate.lighten_color("#1f6f4a")
+        self.assertTrue(lighter.startswith("#") and len(lighter) == 7)
+        self.assertNotEqual(lighter, "#1f6f4a")
+
+    def test_lighten_color_handles_bad_input(self) -> None:
+        self.assertEqual(bubble_dictate.lighten_color("nope"), "nope")
+
+
+class HotkeyTests(unittest.TestCase):
+    def test_valid_hotkey(self) -> None:
+        self.assertTrue(bubble_dictate.is_valid_hotkey("<ctrl>+<alt>+d"))
+
+    def test_blank_hotkey_is_invalid(self) -> None:
+        self.assertFalse(bubble_dictate.is_valid_hotkey("   "))
+
+    def test_garbage_hotkey_is_invalid(self) -> None:
+        self.assertFalse(bubble_dictate.is_valid_hotkey("not a key combo"))
+
+
+class SettingsLayoutFooterTests(unittest.TestCase):
+    def test_quick_history_layout_has_three_footer_buttons(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        for key in ("settings_icon_x", "settings_x", "history_icon_x",
+                    "history_x", "close_icon_x", "close_x",
+                    "footer_divider_x", "footer_divider2_x"):
+            self.assertIn(key, layout)
+
+        self.assertLess(layout["settings_x"], layout["history_x"])
+        self.assertLess(layout["history_x"], layout["close_x"])
 
 
 if __name__ == "__main__":
