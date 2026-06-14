@@ -95,6 +95,13 @@ powershell -ExecutionPolicy Bypass -File .\remove-shortcuts.ps1
 5. Click the text field where the transcript should go.
 6. The app pastes the transcript.
 
+If your cursor is already in an editable text field (a chat box, editor, search
+box — native, browser, or Electron apps), the transcript pastes there
+automatically as soon as it is ready, so you can skip step 5. If no editable
+field is focused, it waits for you to click one (the flow above). The bubble is a
+no-activate window, so clicking it never steals focus from your text field.
+Auto-paste can be turned off with `AUTO_PASTE_WHEN_EDITABLE = False` in `config.py`.
+
 Right-click the bubble to show recent transcript history. Hold left click on the bubble for 2 seconds to quit.
 
 ## Configuration
@@ -111,9 +118,44 @@ Edit `config.py` for user-editable settings:
 - shortcut behavior
 - log paths
 
+## Settings
+
+Right-click the bubble and choose **Settings** to open the in-app panel. Settings are
+saved to `C:\local-dictation\settings.json` and most apply live.
+
+**Transcription**
+
+- Input Language: English (US), Auto Detect, Kurdish, Persian, Arabic. Whisper has no
+  native Kurdish model, so Kurdish uses auto-detect as a best-effort fallback.
+- Model: Fast (`small`), Balanced (`large-v3-turbo`, default), High Accuracy (`large-v3`).
+  The chosen model must already be cached locally because `LOCAL_FILES_ONLY = True`; a tier
+  you have never downloaded will fail to load and the app reverts to the previous tier.
+
+**Interface & Output**
+
+- App Theme: Dark Mode, Light Mode, or System (follows the Windows apps theme).
+- Panel Opacity: 70–100% for the popover and panels.
+- Default Text Format: Plain Text (`.txt`) or Markdown (`.md`), used by Export All.
+- Save Location: folder used by Export All (defaults to your Documents folder).
+
+**Commands & Hotkeys**
+
+- Start/Stop Recording hotkey: a global hotkey in pynput syntax, e.g. `<ctrl>+<alt>+d`.
+  Leave the field blank to disable it. Clicking the bubble always toggles recording.
+
+**Bottom actions**
+
+- Settings, History, Export All, and Close app are available in the Settings panel; the
+  quick-history popover footer has Settings, History, and Close app.
+- Export All writes the full transcript history to one timestamped file
+  (`dictation_export_YYYYMMDD_HHMMSS.txt` or `.md`) in the Save Location.
+
 ## Privacy
 
 Local Dictation Bubble is local-only by design.
+
+- Transcript text is **not** written to logs unless you set `LOG_TRANSCRIPT_TEXT = True`
+  in `config.py`. Transcript history is kept locally in `transcript_history.json`.
 
 - Audio is captured locally.
 - Transcription runs locally.
