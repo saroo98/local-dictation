@@ -5,6 +5,9 @@ __pycache__/
 run.log
 dictation_debug.log
 transcript_history.json
+settings.json
+dictation_export_*.txt
+dictation_export_*.md
 logs/
 *.lnk
 
