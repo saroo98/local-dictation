@@ -13,7 +13,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence
 
 # ---------------------------------------------------------------------
 # NVIDIA CUDA DLL discovery
@@ -63,10 +63,19 @@ import pyautogui
 import pyperclip
 import sounddevice as sd
 import tkinter as tk
+import tkinter.font as tkfont
 import tkinter.ttk as ttk
 
 from faster_whisper import WhisperModel
 from pynput import keyboard, mouse
+
+try:
+    import pystray
+except Exception as exc:  # pragma: no cover - depends on local environment
+    pystray = None
+    PYSTRAY_IMPORT_ERROR = exc
+else:
+    PYSTRAY_IMPORT_ERROR = None
 
 
 # Console may be cp1252 on Windows; render UTF-8 glyphs without crashing.
@@ -122,6 +131,11 @@ session_log_file: Optional[Path] = None
 
 SETTINGS = settings.load_settings()
 hotkey_listener = None  # pynput GlobalHotKeys listener, set at startup
+mouse_listener = None   # pynput mouse.Listener, set at startup
+audio_stream = None     # sounddevice InputStream, set at startup
+tray_icon = None        # pystray.Icon, set at startup when pystray is installed
+tray_state = "ready"
+shutting_down = False
 
 recording_session_counter = 0
 current_recording_session_id = 0
@@ -575,6 +589,252 @@ def show_bubble_window() -> None:
     if bubble_layered:
         render_layered_bubble(root, current_bubble_text, current_bubble_bg)
 
+    update_tray_menu()
+
+
+def bubble_window_is_visible() -> bool:
+    if root is None:
+        return False
+
+    try:
+        return root.state() != "withdrawn" and bool(root.winfo_viewable())
+    except tk.TclError:
+        return False
+
+
+def hide_bubble_window() -> None:
+    if root is None:
+        return
+
+    try:
+        root.withdraw()
+    except tk.TclError:
+        return
+
+    update_tray_menu()
+
+
+def toggle_bubble_window() -> None:
+    if bubble_window_is_visible():
+        hide_bubble_window()
+    else:
+        show_bubble_window()
+
+
+def schedule_on_tk(callback) -> bool:
+    if shutting_down or root is None:
+        return False
+
+    try:
+        root.after(0, callback)
+        return True
+    except tk.TclError as exc:
+        log(f"Tray callback skipped because Tk is unavailable: {exc}")
+        return False
+
+
+def tray_state_from_bubble(text: str, bg: str) -> str:
+    if text == config.RECORDING_LABEL or bg == config.RECORDING_BG:
+        return "recording"
+    if text == config.TRANSCRIBING_LABEL or bg == config.TRANSCRIBING_BG:
+        return "transcribing"
+    if text == config.PASTE_READY_LABEL or bg == config.PASTE_READY_BG:
+        return "paste-ready"
+    if text == config.ERROR_LABEL or bg == config.ERROR_BG:
+        return "error"
+    return "ready"
+
+
+def tray_status_for_state(state: str) -> dict:
+    statuses = {
+        "ready": {
+            "glyph": "play",
+            "bg": config.READY_BG,
+            "title": "Local Dictation - Ready",
+        },
+        "recording": {
+            "glyph": "stop",
+            "bg": config.RECORDING_BG,
+            "title": "Local Dictation - Recording",
+        },
+        "transcribing": {
+            "glyph": "ellipsis",
+            "bg": config.TRANSCRIBING_BG,
+            "title": "Local Dictation - Transcribing",
+        },
+        "paste-ready": {
+            "glyph": "paste",
+            "bg": config.PASTE_READY_BG,
+            "title": "Local Dictation - Paste ready",
+        },
+        "error": {
+            "glyph": "error",
+            "bg": config.ERROR_BG,
+            "title": "Local Dictation - Error",
+        },
+    }
+    return statuses.get(state, statuses["ready"])
+
+
+def make_tray_image(state: str):
+    if not icons.PIL_AVAILABLE:
+        return None
+
+    status = tray_status_for_state(state)
+    return icons.render_bubble_rgba(
+        status["glyph"],
+        status["bg"],
+        lighten_color(status["bg"]),
+        window_size=64,
+        circle_size=56,
+    )
+
+
+def tray_recording_menu_text(_item=None) -> str:
+    with state_lock:
+        is_recording = recording
+        is_transcribing = transcribing
+
+    if is_recording:
+        return "Stop Recording"
+    if is_transcribing:
+        return "Transcribing..."
+    return "Start Recording"
+
+
+def tray_recording_menu_enabled(_item=None) -> bool:
+    with state_lock:
+        return not transcribing
+
+
+def tray_bubble_menu_text(_item=None) -> str:
+    return "Hide Bubble" if bubble_window_is_visible() else "Show Bubble"
+
+
+def on_tray_toggle_recording(_icon=None, _item=None) -> None:
+    schedule_on_tk(toggle_recording_from_shortcut)
+
+
+def on_tray_toggle_bubble(_icon=None, _item=None) -> None:
+    schedule_on_tk(toggle_bubble_window)
+
+
+def on_tray_show_history(_icon=None, _item=None) -> None:
+    schedule_on_tk(show_history_panel)
+
+
+def on_tray_show_settings(_icon=None, _item=None) -> None:
+    schedule_on_tk(show_settings_panel)
+
+
+def on_tray_quit(_icon=None, _item=None) -> None:
+    schedule_on_tk(quit_app)
+
+
+def build_tray_menu():
+    if pystray is None:
+        return None
+
+    item = pystray.MenuItem
+    menu = pystray.Menu
+
+    return menu(
+        item(
+            tray_recording_menu_text,
+            on_tray_toggle_recording,
+            default=True,
+            visible=False,
+            enabled=tray_recording_menu_enabled,
+        ),
+        item(tray_bubble_menu_text, on_tray_toggle_bubble),
+        item(
+            tray_recording_menu_text,
+            on_tray_toggle_recording,
+            enabled=tray_recording_menu_enabled,
+        ),
+        item("History", on_tray_show_history),
+        item("Settings", on_tray_show_settings),
+        menu.SEPARATOR,
+        item("Quit", on_tray_quit),
+    )
+
+
+def update_tray_menu() -> None:
+    if tray_icon is None:
+        return
+
+    try:
+        tray_icon.update_menu()
+    except Exception as exc:
+        log(f"Tray menu update failed: {exc}")
+
+
+def update_tray_state(state: str) -> None:
+    global tray_state
+
+    tray_state = state
+
+    if tray_icon is None:
+        return
+
+    status = tray_status_for_state(state)
+
+    try:
+        tray_icon.icon = make_tray_image(state)
+        tray_icon.title = status["title"]
+        tray_icon.update_menu()
+    except Exception as exc:
+        log(f"Tray state update failed: {exc}")
+
+
+def start_tray_icon() -> bool:
+    global tray_icon
+
+    if tray_icon is not None:
+        return True
+
+    if pystray is None:
+        log(f"Tray icon unavailable: pystray import failed ({PYSTRAY_IMPORT_ERROR}).")
+        return False
+
+    if not icons.PIL_AVAILABLE:
+        log("Tray icon unavailable: Pillow is not available.")
+        return False
+
+    state = tray_state_from_bubble(current_bubble_text, current_bubble_bg)
+    status = tray_status_for_state(state)
+
+    try:
+        tray_icon = pystray.Icon(
+            "local-dictation",
+            icon=make_tray_image(state),
+            title=status["title"],
+            menu=build_tray_menu(),
+        )
+        tray_icon.run_detached()
+        update_tray_state(state)
+        log("Tray icon started.")
+        return True
+    except Exception as exc:
+        tray_icon = None
+        log_exception("Tray icon failed to start", exc)
+        return False
+
+
+def stop_tray_icon() -> None:
+    global tray_icon
+
+    icon = tray_icon
+    tray_icon = None
+
+    if icon is None:
+        return
+
+    try:
+        icon.stop()
+    except Exception:
+        pass
+
 
 def toggle_recording_from_shortcut() -> None:
     show_bubble_window()
@@ -814,7 +1074,10 @@ def clean_transcript_text(text: str, language: Optional[str] = "en") -> str:
 # ---------------------------------------------------------------------
 
 def effective_model_name() -> str:
-    return settings.model_tier_to_name(SETTINGS["model"])
+    return settings.model_tier_to_name(
+        SETTINGS["model"],
+        custom_models=SETTINGS.get("custom_models"),
+    )
 
 
 def effective_language() -> Optional[str]:
@@ -1010,6 +1273,7 @@ def set_bubble(text: str, bg: str) -> None:
             render_layered_bubble(root, text, bg)
         elif bubble is not None:
             draw_bubble_state(bubble, text, bg)
+        update_tray_state(tray_state_from_bubble(text, bg))
 
     root.after(0, update)
 
@@ -1332,6 +1596,99 @@ def preview_text(text: str, limit: int = 64) -> str:
     return preview[: limit - 1].rstrip() + "..."
 
 
+def truncate_text_to_pixel_width(
+    text: str,
+    max_width: int,
+    measure: Callable[[str], int],
+    ellipsis: str = "...",
+) -> str:
+    preview = " ".join(text.split())
+
+    if not preview or max_width <= 0:
+        return ""
+
+    if measure(preview) <= max_width:
+        return preview
+
+    if measure(ellipsis) > max_width:
+        return ""
+
+    low = 0
+    high = len(preview)
+    best = ""
+
+    while low <= high:
+        mid = (low + high) // 2
+        candidate = preview[:mid].rstrip() + ellipsis
+
+        if measure(candidate) <= max_width:
+            best = candidate
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    prefix = best[:-len(ellipsis)].rstrip() if best.endswith(ellipsis) else best
+    if " " in prefix:
+        word_prefix = prefix.rsplit(" ", 1)[0].rstrip()
+        if len(word_prefix) >= max(1, int(len(prefix) * 0.7)):
+            best = word_prefix + ellipsis
+
+    return best
+
+
+def wrap_text_to_pixel_lines(
+    text: str,
+    max_lines: int,
+    max_width: int,
+    measure: Callable[[str], int],
+    ellipsis: str = "...",
+) -> List[str]:
+    words = " ".join(text.split()).split()
+    if not words or max_lines <= 0 or max_width <= 0:
+        return []
+
+    lines: List[str] = []
+    current = ""
+    index = 0
+
+    while index < len(words) and len(lines) < max_lines:
+        word = words[index]
+        candidate = word if not current else f"{current} {word}"
+
+        if measure(candidate) <= max_width:
+            current = candidate
+            index += 1
+            continue
+
+        if current:
+            lines.append(current)
+            current = ""
+            continue
+
+        lines.append(
+            truncate_text_to_pixel_width(
+                word,
+                max_width=max_width,
+                measure=measure,
+                ellipsis=ellipsis,
+            )
+        )
+        index += 1
+
+    if current and len(lines) < max_lines:
+        lines.append(current)
+
+    if index < len(words) and lines:
+        lines[-1] = truncate_text_to_pixel_width(
+            f"{lines[-1]} {' '.join(words[index:])}",
+            max_width=max_width,
+            measure=measure,
+            ellipsis=ellipsis,
+        )
+
+    return lines
+
+
 def quick_history_preview_lines(
     text: str,
     max_lines: int = 2,
@@ -1402,6 +1759,51 @@ def paste_history_text(text: str) -> None:
     ).start()
 
 
+def history_panel_layout() -> dict:
+    return {
+        "preview_width_chars": 48,
+        "copy_icon_size": 18,
+        "action_count": 1,
+        "row_pad_x": 12,
+        "row_pad_y": 5,
+    }
+
+
+def make_icon_button(
+    parent,
+    palette,
+    icon_name: str,
+    command,
+    size: int = 34,
+    icon_size: int = 17,
+):
+    button = tk.Button(
+        parent,
+        text="",
+        width=size,
+        height=size,
+        bd=0,
+        relief="flat",
+        bg=palette["button_bg"],
+        activebackground=palette["button_hover"],
+        cursor="hand2",
+        command=command,
+    )
+
+    if icons.PIL_AVAILABLE:
+        try:
+            photo = glyph_photo(icon_name, palette["text"], icon_size)
+            button.configure(image=photo)
+            button.image = photo
+        except Exception as exc:
+            log_exception("Icon button glyph failed", exc)
+            button.configure(text=icon_name[:1].upper(), fg=palette["text"])
+    else:
+        button.configure(text=icon_name[:1].upper(), fg=palette["text"])
+
+    return button
+
+
 def show_history_panel() -> None:
     global history_panel
 
@@ -1428,17 +1830,19 @@ def show_history_panel() -> None:
     except tk.TclError:
         pass
 
+    layout = history_panel_layout()
+
     header = tk.Label(
         panel,
         text="Last 5",
         anchor="w",
-        padx=8,
-        pady=6,
+        padx=layout["row_pad_x"],
+        pady=8,
         bg=palette["panel_bg"],
         fg=palette["text"],
         font=(config.BUBBLE_FONT_FAMILY, 9, "bold"),
     )
-    header.grid(row=0, column=0, columnspan=3, sticky="ew")
+    header.grid(row=0, column=0, columnspan=2, sticky="ew")
 
     items = history_items_for_display()
 
@@ -1452,44 +1856,30 @@ def show_history_panel() -> None:
             bg=palette["panel_bg"],
             fg=palette["muted_text"],
         )
-        empty.grid(row=1, column=0, columnspan=3, sticky="ew")
+        empty.grid(row=1, column=0, columnspan=2, sticky="ew")
     else:
         for row, text in enumerate(items, start=1):
             label = tk.Label(
                 panel,
                 text=preview_text(text),
-                width=42,
+                width=layout["preview_width_chars"],
                 anchor="w",
-                padx=8,
-                pady=4,
+                padx=layout["row_pad_x"],
+                pady=layout["row_pad_y"],
                 bg=palette["panel_bg"],
                 fg=palette["text"],
             )
             label.grid(row=row, column=0, sticky="w")
 
-            copy_button = tk.Button(
+            copy_button = make_icon_button(
                 panel,
-                text="Copy",
-                width=6,
-                bg=palette["button_bg"],
-                fg=palette["text"],
-                activebackground=palette["button_hover"],
-                relief="flat",
-                command=lambda value=text: copy_history_text(value),
+                palette,
+                "copy",
+                lambda value=text: copy_history_text(value),
+                size=32,
+                icon_size=layout["copy_icon_size"],
             )
-            copy_button.grid(row=row, column=1, padx=2, pady=2)
-
-            paste_button = tk.Button(
-                panel,
-                text="Paste",
-                width=6,
-                bg=palette["button_bg"],
-                fg=palette["text"],
-                activebackground=palette["button_hover"],
-                relief="flat",
-                command=lambda value=text: paste_history_text(value),
-            )
-            paste_button.grid(row=row, column=2, padx=2, pady=2)
+            copy_button.grid(row=row, column=1, padx=(2, 10), pady=4)
 
     close_button = tk.Button(
         panel,
@@ -1500,7 +1890,7 @@ def show_history_panel() -> None:
         relief="flat",
         command=panel.destroy,
     )
-    close_button.grid(row=6, column=0, columnspan=3, sticky="ew", padx=8, pady=6)
+    close_button.grid(row=6, column=0, columnspan=2, sticky="ew", padx=10, pady=8)
 
     panel.protocol("WM_DELETE_WINDOW", panel.destroy)
 
@@ -1583,6 +1973,58 @@ def draw_quick_canvas_button(
     canvas.tag_bind(tag, "<Leave>", lambda _event: canvas.itemconfigure(bg_tag, fill=fill))
 
 
+def draw_quick_icon_button(
+    canvas: tk.Canvas,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    icon_name: str,
+    command,
+    tag: str,
+    fill: str,
+    hover_fill: str,
+    outline: str,
+    text_color: str = config.QUICK_HISTORY_TEXT,
+    icon_size: int = 18,
+    radius: int = 9,
+) -> None:
+    bg_tag = f"{tag}-bg"
+    draw_round_rect(
+        canvas,
+        x,
+        y,
+        x + width,
+        y + height,
+        radius=radius,
+        fill=fill,
+        outline=outline,
+        width=1,
+        tags=(tag, bg_tag),
+    )
+
+    icon_x = x + width // 2
+    icon_y = y + height // 2
+    rendered = False
+    if icons.PIL_AVAILABLE:
+        try:
+            photo = glyph_photo(icon_name, text_color, icon_size)
+            canvas.create_image(icon_x, icon_y, image=photo, tags=(tag,))
+            if not hasattr(canvas, "_glyph_photos"):
+                canvas._glyph_photos = []
+            canvas._glyph_photos.append(photo)
+            rendered = True
+        except Exception as exc:
+            log_exception("Quick action glyph render failed; using vector", exc)
+
+    if not rendered:
+        _draw_footer_icon_vector(canvas, icon_name, icon_x, icon_y, text_color, tag)
+
+    canvas.tag_bind(tag, "<Button-1>", lambda _event: command())
+    canvas.tag_bind(tag, "<Enter>", lambda _event: canvas.itemconfigure(bg_tag, fill=hover_fill))
+    canvas.tag_bind(tag, "<Leave>", lambda _event: canvas.itemconfigure(bg_tag, fill=fill))
+
+
 def draw_quick_text_button(
     canvas: tk.Canvas,
     x: int,
@@ -1625,6 +2067,20 @@ def _draw_footer_icon_vector(canvas, icon, icon_x, icon_center_y, text_color, ta
     elif icon == "close":
         canvas.create_line(icon_x - 8, icon_center_y - 8, icon_x + 8, icon_center_y + 8, fill=text_color, width=2, capstyle="round", tags=(tag,))
         canvas.create_line(icon_x + 8, icon_center_y - 8, icon_x - 8, icon_center_y + 8, fill=text_color, width=2, capstyle="round", tags=(tag,))
+    elif icon == "copy":
+        canvas.create_rectangle(icon_x - 5, icon_center_y - 8, icon_x + 7, icon_center_y + 4,
+                                outline=text_color, width=1, tags=(tag,))
+        canvas.create_rectangle(icon_x - 8, icon_center_y - 4, icon_x + 4, icon_center_y + 8,
+                                outline=text_color, width=1, tags=(tag,))
+    elif icon == "tray":
+        canvas.create_line(icon_x, icon_center_y - 8, icon_x, icon_center_y + 2,
+                           fill=text_color, width=1, capstyle="round", tags=(tag,))
+        canvas.create_line(icon_x - 5, icon_center_y - 2, icon_x, icon_center_y + 3,
+                           fill=text_color, width=1, capstyle="round", tags=(tag,))
+        canvas.create_line(icon_x + 5, icon_center_y - 2, icon_x, icon_center_y + 3,
+                           fill=text_color, width=1, capstyle="round", tags=(tag,))
+        canvas.create_rectangle(icon_x - 8, icon_center_y + 6, icon_x + 8, icon_center_y + 10,
+                                outline=text_color, width=1, tags=(tag,))
 
 
 def draw_quick_footer_button(
@@ -1637,13 +2093,15 @@ def draw_quick_footer_button(
     tag: str,
     icon: str,
     text_color: str = config.QUICK_HISTORY_TEXT,
+    icon_size: int = 22,
+    font_size: int = 12,
 ) -> None:
-    icon_center_y = y + 10
+    icon_center_y = y + 13
 
     rendered = False
     if icons.PIL_AVAILABLE:
         try:
-            photo = glyph_photo(icon, text_color, 22)
+            photo = glyph_photo(icon, text_color, icon_size)
             canvas.create_image(icon_x, icon_center_y, image=photo, tags=(tag,))
             if not hasattr(canvas, "_glyph_photos"):
                 canvas._glyph_photos = []
@@ -1660,7 +2118,7 @@ def draw_quick_footer_button(
         y,
         anchor="nw",
         fill=text_color,
-        font=(config.BUBBLE_FONT_FAMILY, 12),
+        font=(config.BUBBLE_FONT_FAMILY, font_size),
         text=text,
         tags=(tag,),
     )
@@ -1685,7 +2143,7 @@ def quick_popover_geometry(width: int, height: int) -> str:
 
     bubble_center_x = bubble_x + active_hit_target_size // 2
     x = bubble_center_x - layout["pointer_tip_x"]
-    y = bubble_y - height - 10
+    y = bubble_y - height - layout["bubble_gap"]
 
     x = max(8, min(x, screen_width - width - 8))
     y = max(8, min(y, screen_height - height - 8))
@@ -1712,6 +2170,11 @@ def paste_quick_history_text(text: str) -> None:
         paste_history_text(text)
 
 
+def hide_to_tray_from_quick_popover() -> None:
+    close_quick_history_popover()
+    hide_bubble_window()
+
+
 def should_ignore_quick_history_request(now: Optional[float] = None) -> bool:
     global last_quick_history_request_at
 
@@ -1729,47 +2192,124 @@ def quick_history_layout(
     height: int = config.QUICK_HISTORY_HEIGHT,
     pointer: int = config.QUICK_HISTORY_POINTER_SIZE,
 ) -> dict:
-    panel_pad = 16
+    panel_pad = 8
     panel_top = 8
     panel_bottom = height - pointer
-    footer_y = panel_bottom - 44
-    pointer_tip_x = width - 31
-    pointer_base_left = pointer_tip_x - 18
-    pointer_base_right = min(pointer_tip_x + 13, width - panel_pad)
+    footer_y = panel_bottom - 35
+    pointer_tip_x = width - 22
+    pointer_base_left = pointer_tip_x - 7
+    pointer_base_right = min(pointer_tip_x + 7, width - panel_pad)
+    copy_x = width - 56
+    text_x = 28
+    first_divider = int(width * 0.275)
+    second_divider = int(width * 0.50)
+    third_divider = int(width * 0.725)
 
     return {
         "panel_top": panel_top,
         "panel_bottom": panel_bottom,
         "panel_pad": panel_pad,
-        "row_top": 34,
-        "row_height": 86,
-        "text_x": 36,
+        "panel_radius": 13,
+        "row_top": 22,
+        "row_height": 63,
+        "text_x": text_x,
         "time_y_offset": 0,
-        "transcript_y_offset": 25,
-        "transcript_line_gap": 20,
-        "transcript_width": 236,
+        "transcript_y_offset": 17,
+        "transcript_line_gap": 15,
+        "transcript_width": copy_x - text_x - 19,
         "preview_line_chars": 34,
-        "button_y_offset": 20,
-        "button_width": 68,
-        "button_height": 36,
-        "copy_x": width - 176,
-        "paste_x": width - 98,
-        "row_separator_offset": 72,
+        "preview_max_lines": 2,
+        "time_font_size": 10,
+        "transcript_font_size": 12,
+        "button_y_offset": 10,
+        "button_width": 34,
+        "button_height": 30,
+        "button_radius": 7,
+        "copy_x": copy_x,
+        "copy_icon_x": copy_x + 17,
+        "copy_icon_size": 15,
+        "row_separator_offset": 58,
         "footer_y": footer_y,
-        "footer_separator_y": footer_y - 16,
-        "line_end": width - 36,
-        "settings_icon_x": 52,
-        "settings_x": 66,
-        "footer_divider_x": 150,
-        "history_icon_x": 196,
-        "history_x": 210,
-        "footer_divider2_x": 290,
-        "close_icon_x": 318,
-        "close_x": 332,
+        "bubble_gap": 2,
+        "footer_font_size": 10,
+        "footer_icon_size": 14,
+        "footer_separator_y": footer_y - 15,
+        "line_end": width - 20,
+        "settings_icon_x": 27,
+        "settings_x": 44,
+        "footer_divider_x": first_divider,
+        "history_icon_x": first_divider + 24,
+        "history_x": first_divider + 42,
+        "footer_divider2_x": second_divider,
+        "tray_icon_x": second_divider + 24,
+        "tray_x": second_divider + 42,
+        "footer_divider3_x": third_divider,
+        "close_icon_x": third_divider + 24,
+        "close_x": third_divider + 42,
+        "footer_actions": ["Settings", "History", "Tray", "Close app"],
         "pointer_tip_x": pointer_tip_x,
+        "pointer_tip_y": height - 4,
+        "pointer_tip_y_offset": height - 4 - panel_bottom,
         "pointer_base_left": pointer_base_left,
         "pointer_base_right": pointer_base_right,
+        "pointer_smooth": True,
+        "tail_renderer": "pillow",
     }
+
+
+def render_quick_popover_background(
+    width: int,
+    height: int,
+    layout: dict,
+    palette: dict,
+):
+    from PIL import Image, ImageDraw
+
+    scale = 3
+    image = Image.new("RGBA", (width * scale, height * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    def sx(value: int) -> int:
+        return int(value * scale)
+
+    panel_box = [
+        sx(layout["panel_pad"]),
+        sx(layout["panel_top"]),
+        sx(width - layout["panel_pad"]),
+        sx(layout["panel_bottom"]),
+    ]
+    radius = sx(layout["panel_radius"])
+
+    draw.rounded_rectangle(
+        panel_box,
+        radius=radius,
+        fill=palette["panel_bg"],
+        outline=palette["panel_border"],
+        width=sx(1),
+    )
+    draw.rounded_rectangle(
+        [
+            panel_box[0] + sx(1),
+            panel_box[1] + sx(1),
+            panel_box[2] - sx(1),
+            panel_box[3] - sx(1),
+        ],
+        radius=max(1, radius - sx(1)),
+        outline=palette["inner_border"],
+        width=sx(1),
+    )
+
+    tail_points = [
+        (sx(layout["pointer_base_left"]), sx(layout["panel_bottom"] - 1)),
+        (sx(layout["pointer_base_left"] + 4), sx(layout["panel_bottom"] + 1)),
+        (sx(layout["pointer_tip_x"]), sx(layout["pointer_tip_y"])),
+        (sx(layout["pointer_base_right"] - 4), sx(layout["panel_bottom"] + 1)),
+        (sx(layout["pointer_base_right"]), sx(layout["panel_bottom"] - 1)),
+    ]
+    draw.polygon(tail_points, fill=palette["panel_bg"])
+    draw.line(tail_points, fill=palette["panel_border"], width=sx(1), joint="curve")
+
+    return image.resize((width, height), Image.Resampling.LANCZOS)
 
 
 def show_quick_history_popover(event=None):
@@ -1818,54 +2358,31 @@ def show_quick_history_popover(event=None):
     )
     canvas.place(x=0, y=0, width=width, height=height)
 
-    draw_round_rect(
-        canvas,
-        layout["panel_pad"],
-        layout["panel_top"],
-        width - layout["panel_pad"],
-        layout["panel_bottom"],
-        radius=12,
-        fill=palette["panel_bg"],
-        outline=palette["panel_border"],
-        width=1,
-    )
-    draw_round_rect(
-        canvas,
-        layout["panel_pad"] + 1,
-        layout["panel_top"] + 1,
-        width - layout["panel_pad"] - 1,
-        layout["panel_bottom"] - 1,
-        radius=11,
-        fill="",
-        outline=palette["inner_border"],
-        width=1,
-    )
-    canvas.create_polygon(
-        layout["pointer_base_left"],
-        layout["panel_bottom"] - 1,
-        layout["pointer_base_right"],
-        layout["panel_bottom"] - 1,
-        layout["pointer_tip_x"],
-        height - 2,
-        fill=palette["panel_bg"],
-        outline="",
-    )
-    canvas.create_line(
-        layout["pointer_base_left"],
-        layout["panel_bottom"],
-        layout["pointer_tip_x"],
-        height - 2,
-        fill=palette["panel_border"],
-    )
-    canvas.create_line(
-        layout["pointer_tip_x"],
-        height - 2,
-        layout["pointer_base_right"],
-        layout["panel_bottom"],
-        fill=palette["panel_border"],
-    )
+    if icons.PIL_AVAILABLE:
+        from PIL import ImageTk
+
+        background = render_quick_popover_background(width, height, layout, palette)
+        background_photo = ImageTk.PhotoImage(background)
+        canvas.background_photo = background_photo
+        canvas.create_image(0, 0, anchor="nw", image=background_photo)
+    else:
+        draw_round_rect(
+            canvas,
+            layout["panel_pad"],
+            layout["panel_top"],
+            width - layout["panel_pad"],
+            layout["panel_bottom"],
+            radius=layout["panel_radius"],
+            fill=palette["panel_bg"],
+            outline=palette["panel_border"],
+            width=1,
+        )
 
     items = quick_history_items_for_display(limit=config.QUICK_HISTORY_LIMIT)
+    transcript_font = tkfont.Font(
+        family=config.BUBBLE_FONT_FAMILY,
+        size=layout["transcript_font_size"],
+    )
 
     if not items:
         canvas.create_text(
@@ -1873,7 +2390,7 @@ def show_quick_history_popover(event=None):
             layout["row_top"] + 28,
             anchor="nw",
             fill=palette["muted_text"],
-            font=(config.BUBBLE_FONT_FAMILY, 12),
+            font=(config.BUBBLE_FONT_FAMILY, layout["transcript_font_size"]),
             text="No transcripts yet",
         )
     else:
@@ -1884,52 +2401,40 @@ def show_quick_history_popover(event=None):
                 y + layout["time_y_offset"],
                 anchor="nw",
                 fill=palette["muted_text"],
-                font=(config.BUBBLE_FONT_FAMILY, 11),
+                font=(config.BUBBLE_FONT_FAMILY, layout["time_font_size"]),
                 text=item.display_time,
             )
-            canvas.create_text(
-                layout["text_x"],
-                y + layout["transcript_y_offset"],
-                anchor="nw",
-                fill=palette["text"],
-                font=(config.BUBBLE_FONT_FAMILY, 12),
-                text="\n".join(
-                    quick_history_preview_lines(
-                        item.text,
-                        max_lines=2,
-                        max_line_chars=layout["preview_line_chars"],
-                    )
-                ),
+            preview_lines = wrap_text_to_pixel_lines(
+                item.text,
+                max_lines=layout["preview_max_lines"],
+                max_width=layout["transcript_width"],
+                measure=transcript_font.measure,
             )
+            for line_index, line in enumerate(preview_lines):
+                canvas.create_text(
+                    layout["text_x"],
+                    y + layout["transcript_y_offset"] + line_index * layout["transcript_line_gap"],
+                    anchor="nw",
+                    fill=palette["text"],
+                    font=(config.BUBBLE_FONT_FAMILY, layout["transcript_font_size"]),
+                    text=line,
+                )
 
-            draw_quick_canvas_button(
+            draw_quick_icon_button(
                 canvas,
                 layout["copy_x"],
                 y + layout["button_y_offset"],
                 layout["button_width"],
                 layout["button_height"],
-                "Copy",
+                "copy",
                 lambda value=item.text: copy_quick_history_text(value),
                 f"quick-copy-{index}",
                 fill=palette["button_bg"],
                 hover_fill=palette["button_hover"],
                 outline=palette["button_border"],
                 text_color=palette["text"],
-            )
-
-            draw_quick_canvas_button(
-                canvas,
-                layout["paste_x"],
-                y + layout["button_y_offset"],
-                layout["button_width"],
-                layout["button_height"],
-                "Paste",
-                lambda value=item.text: paste_quick_history_text(value),
-                f"quick-paste-{index}",
-                fill=palette["button_bg"],
-                hover_fill=palette["button_hover"],
-                outline=palette["button_border"],
-                text_color=palette["text"],
+                icon_size=layout["copy_icon_size"],
+                radius=layout["button_radius"],
             )
 
             if index < config.QUICK_HISTORY_LIMIT - 1:
@@ -1960,6 +2465,8 @@ def show_quick_history_popover(event=None):
         "quick-settings",
         "settings",
         text_color=palette["text"],
+        icon_size=layout["footer_icon_size"],
+        font_size=layout["footer_font_size"],
     )
 
     canvas.create_line(
@@ -1980,12 +2487,36 @@ def show_quick_history_popover(event=None):
         "quick-history",
         "history",
         text_color=palette["text"],
+        icon_size=layout["footer_icon_size"],
+        font_size=layout["footer_font_size"],
     )
 
     canvas.create_line(
         layout["footer_divider2_x"],
         layout["footer_y"] - 6,
         layout["footer_divider2_x"],
+        layout["footer_y"] + 30,
+        fill=palette["separator"],
+    )
+
+    draw_quick_footer_button(
+        canvas,
+        layout["tray_icon_x"],
+        layout["tray_x"],
+        layout["footer_y"] + 2,
+        "Tray",
+        hide_to_tray_from_quick_popover,
+        "quick-tray",
+        "tray",
+        text_color=palette["text"],
+        icon_size=layout["footer_icon_size"],
+        font_size=layout["footer_font_size"],
+    )
+
+    canvas.create_line(
+        layout["footer_divider3_x"],
+        layout["footer_y"] - 6,
+        layout["footer_divider3_x"],
         layout["footer_y"] + 30,
         fill=palette["separator"],
     )
@@ -2000,6 +2531,8 @@ def show_quick_history_popover(event=None):
         "quick-close",
         "close",
         text_color=palette["text"],
+        icon_size=layout["footer_icon_size"],
+        font_size=layout["footer_font_size"],
     )
 
     bind_quick_popover_close_events(popover)
@@ -2039,13 +2572,17 @@ def bind_panel_drag(window, handle) -> None:
         new_y = window.winfo_y() + event.y - state["y"]
         window.geometry(f"+{new_x}+{new_y}")
 
-    handle.bind("<ButtonPress-1>", press)
-    handle.bind("<B1-Motion>", drag)
+    def bind_tree(widget) -> None:
+        if isinstance(widget, tk.Button):
+            return
 
-    for child in handle.winfo_children():
-        if not isinstance(child, tk.Button):
-            child.bind("<ButtonPress-1>", press)
-            child.bind("<B1-Motion>", drag)
+        widget.bind("<ButtonPress-1>", press)
+        widget.bind("<B1-Motion>", drag)
+
+        for child in widget.winfo_children():
+            bind_tree(child)
+
+    bind_tree(handle)
 
 
 def apply_dark_combobox_style(style, palette) -> None:
@@ -2055,18 +2592,32 @@ def apply_dark_combobox_style(style, palette) -> None:
         pass
 
     style.configure(
-        "TCombobox",
+        "Settings.TCombobox",
         fieldbackground=palette["field_bg"],
         background=palette["button_bg"],
         foreground=palette["text"],
         arrowcolor=palette["text"],
+        bordercolor=palette["inner_border"],
+        lightcolor=palette["field_bg"],
+        darkcolor=palette["field_bg"],
+        relief="flat",
+        padding=(10, 4),
     )
     style.map(
-        "TCombobox",
+        "Settings.TCombobox",
         fieldbackground=[("readonly", palette["field_bg"])],
         foreground=[("readonly", palette["text"])],
+        background=[("active", palette["button_hover"])],
+        bordercolor=[("focus", palette["accent"])],
     )
-    style.configure("TScale", background=palette["panel_bg"])
+    style.configure(
+        "Settings.Horizontal.TScale",
+        background=palette["row_bg"],
+        troughcolor=palette["field_bg"],
+        bordercolor=palette["row_bg"],
+        lightcolor=palette["row_bg"],
+        darkcolor=palette["row_bg"],
+    )
 
     try:
         style.master.option_add("*TCombobox*Listbox.background", palette["field_bg"])
@@ -2089,6 +2640,90 @@ def show_info_tip(text: str) -> None:
     from tkinter import messagebox
 
     messagebox.showinfo("Model tiers", text)
+
+
+def settings_visual_palette(base_palette: dict) -> dict:
+    resolved = settings.resolve_theme(SETTINGS["theme"])
+
+    if resolved == "Light Mode":
+        overrides = {
+            "panel_bg": "#f8f7f3",
+            "panel_border": "#d3cabc",
+            "inner_border": "#eee8dc",
+            "separator": "#e4ded2",
+            "text": "#16191d",
+            "muted_text": "#66706d",
+            "button_bg": "#f0ece3",
+            "button_border": "#d8d0c3",
+            "button_hover": "#e7e1d6",
+            "field_bg": "#ffffff",
+            "row_bg": "#fbfaf6",
+            "row_ring": "#e4ded2",
+            "row_inner": "#f6f2eb",
+            "accent": "#2f9b88",
+            "accent_bg": "#1f7f70",
+            "accent_hover": "#176b5f",
+            "accent_text": "#ffffff",
+            "footer_bg": "#f7f3ec",
+            "help_bg": "#f3eee5",
+        }
+    else:
+        overrides = {
+            "panel_bg": "#080b10",
+            "panel_border": "#2b3544",
+            "inner_border": "#1c2632",
+            "separator": "#16202b",
+            "text": "#f7f9fc",
+            "muted_text": "#9aa5b5",
+            "button_bg": "#0f151f",
+            "button_border": "#303b4a",
+            "button_hover": "#182231",
+            "field_bg": "#070b11",
+            "row_bg": "#0b1017",
+            "row_ring": "#1b2531",
+            "row_inner": "#0a0f16",
+            "accent": "#8ee6ba",
+            "accent_bg": "#14271f",
+            "accent_hover": "#1b372b",
+            "accent_text": "#f4fff9",
+            "footer_bg": "#090e15",
+            "help_bg": "#0c121b",
+        }
+
+    enriched = dict(base_palette)
+    enriched.update(overrides)
+    return enriched
+
+
+def settings_panel_layout() -> dict:
+    return {
+        "width": 620,
+        "height": 630,
+        "outer_pad_x": 12,
+        "header_pad_x": 22,
+        "section_pad_x": 12,
+        "section_gap": 9,
+        "minimum_font_size": 8,
+        "label_width": 15,
+        "control_width": 24,
+        "control_alignment": "left",
+        "control_start_x": 190,
+        "model_info_reserved_lines": 2,
+        "model_info_font_size": 8,
+        "model_folder_label_width": 15,
+        "model_folder_font_size": 8,
+        "model_order_label_width": 15,
+        "manual_model_font_size": 8,
+        "hotkey_help_font_size": 8,
+        "commands_min_height": 116,
+        "help_wraplength": 500,
+        "help_reserved_lines": 2,
+        "help_text": "Click bubble anytime. Hotkey: <ctrl>+<alt>+d. Leave blank to disable.",
+        "close_button_size": 24,
+        "sections": ["Transcription", "Interface & Output", "Commands & Hotkeys"],
+        "footer_actions": ["History", "Export", "Close app", "Save changes"],
+        "primary_action": "Save changes",
+    }
 
 
 def redraw_bubble_current_state() -> None:
@@ -2128,116 +2763,521 @@ def reload_model_for_settings(previous_model: str) -> None:
         set_bubble(config.READY_LABEL, config.READY_BG)
 
 
-def build_settings_form(parent, palette) -> dict:
-    section_font = (config.BUBBLE_FONT_FAMILY, 9, "bold")
-    label_font = (config.BUBBLE_FONT_FAMILY, 9)
+def model_download_button_state(
+    model_choice: str,
+    *,
+    cache_root: Optional[Path] = None,
+    custom_models: Optional[Sequence[dict]] = None,
+) -> dict:
+    details = settings.model_tier_details(
+        model_choice,
+        cache_root=cache_root,
+        custom_models=custom_models,
+    )
+    can_download = bool(details["repo_id"])
+    if details["available"]:
+        return {"visible": can_download, "enabled": False, "text": "Installed"}
+    return {"visible": can_download, "enabled": can_download, "text": "Download"}
 
-    def section(title):
+
+def download_model_for_choice(
+    model_choice: str,
+    *,
+    custom_models: Optional[Sequence[dict]] = None,
+    download_model_func=None,
+    snapshot_download_func=None,
+):
+    details = settings.model_tier_details(
+        model_choice,
+        custom_models=custom_models,
+    )
+    if not details["repo_id"]:
+        raise ValueError("Only Hugging Face model repos can be downloaded.")
+
+    cache_dir = str(config.MODEL_DOWNLOAD_ROOT) if config.MODEL_DOWNLOAD_ROOT else None
+    allow_patterns = [
+        "config.json",
+        "preprocessor_config.json",
+        "model.bin",
+        "tokenizer.json",
+        "vocabulary.*",
+    ]
+
+    if details["custom"]:
+        if snapshot_download_func is None:
+            from huggingface_hub import snapshot_download as snapshot_download_func
+
+        kwargs = {
+            "repo_id": details["repo_id"],
+            "repo_type": "model",
+            "allow_patterns": allow_patterns,
+            "local_files_only": False,
+        }
+        if cache_dir is not None:
+            kwargs["cache_dir"] = cache_dir
+        return snapshot_download_func(**kwargs)
+
+    if download_model_func is None:
+        from faster_whisper.utils import download_model as download_model_func
+
+    kwargs = {
+        "local_files_only": False,
+    }
+    if cache_dir is not None:
+        kwargs["cache_dir"] = cache_dir
+    return download_model_func(details["model_name"], **kwargs)
+
+
+def copy_model_cache_path() -> None:
+    path = str(settings.huggingface_cache_root())
+    pyperclip.copy(path)
+    log("Model cache path copied.")
+
+
+def open_model_cache_folder() -> None:
+    path = settings.huggingface_cache_root()
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(path))
+    except Exception as exc:
+        log_exception("Could not open model cache folder", exc)
+
+
+def add_custom_model_dialog() -> None:
+    from tkinter import messagebox, simpledialog
+
+    name = simpledialog.askstring("Add custom model", "Display name:")
+    if not name:
+        return
+    source = simpledialog.askstring(
+        "Add custom model",
+        "Hugging Face repo ID or local faster-whisper model folder:",
+    )
+    if not source:
+        return
+
+    candidate = [{"name": name, "source": source}]
+    normalized = settings.normalize_custom_models(
+        list(SETTINGS.get("custom_models", [])) + candidate
+    )
+    if len(normalized) == len(SETTINGS.get("custom_models", [])):
+        messagebox.showerror(
+            "Custom model",
+            "Use a unique name and a valid Hugging Face repo ID or faster-whisper model folder.",
+        )
+        return
+
+    SETTINGS["custom_models"] = normalized
+    settings.save_settings(SETTINGS)
+    refresh_settings_panel()
+
+
+def start_model_download_from_settings(model_var, download_button, model_info_var) -> None:
+    model_choice = model_var.get()
+    download_button.configure(text="Downloading...", state="disabled")
+    model_info_var.set(f"Downloading {model_choice}...")
+
+    def worker() -> None:
+        try:
+            download_model_for_choice(
+                model_choice,
+                custom_models=SETTINGS.get("custom_models"),
+            )
+        except Exception as exc:
+            log_exception("Model download failed", exc)
+
+            def fail() -> None:
+                model_info_var.set(f"Download failed: {model_choice}")
+                state = model_download_button_state(
+                    model_choice,
+                    custom_models=SETTINGS.get("custom_models"),
+                )
+                download_button.configure(text=state["text"], state="normal" if state["enabled"] else "disabled")
+
+            if root is not None:
+                root.after(0, fail)
+            return
+
+        log(f"Model downloaded: {model_choice}")
+
+        def succeed() -> None:
+            model_info_var.set(
+                settings.model_tier_summary(
+                    model_choice,
+                    custom_models=SETTINGS.get("custom_models"),
+                    include_revision=False,
+                )
+            )
+            state = model_download_button_state(
+                model_choice,
+                custom_models=SETTINGS.get("custom_models"),
+            )
+            download_button.configure(text=state["text"], state="normal" if state["enabled"] else "disabled")
+
+        if root is not None:
+            root.after(0, succeed)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def build_settings_form(parent, palette) -> dict:
+    layout = settings_panel_layout()
+    section_font = (config.BUBBLE_FONT_FAMILY, 10, "bold")
+    label_font = (config.BUBBLE_FONT_FAMILY, 8)
+    control_font = (config.BUBBLE_FONT_FAMILY, 8)
+    hint_font = (config.BUBBLE_FONT_FAMILY, 8)
+
+    def section_card(title, icon_name):
+        shell = tk.Frame(parent, bg=palette["row_ring"])
+        shell.pack(fill="x", pady=(0, layout["section_gap"]))
+        card = tk.Frame(shell, bg=palette["row_bg"])
+        card.pack(fill="x", padx=1, pady=1)
+
+        header = tk.Frame(card, bg=palette["row_bg"])
+        header.pack(fill="x", padx=layout["section_pad_x"], pady=(7, 5))
+        if icons.PIL_AVAILABLE:
+            try:
+                photo = glyph_photo(icon_name, palette["muted_text"], 13)
+                icon = tk.Label(header, image=photo, bg=palette["row_bg"])
+                icon.image = photo
+                icon.pack(side="left", padx=(0, 9))
+            except Exception as exc:
+                log_exception("Settings section glyph failed", exc)
         tk.Label(
-            parent,
-            text=title.upper(),
-            bg=palette["panel_bg"],
-            fg=palette["muted_text"],
+            header,
+            text=title,
+            bg=palette["row_bg"],
+            fg=palette["text"],
             font=section_font,
             anchor="w",
-        ).pack(fill="x", padx=12, pady=(10, 2))
+        ).pack(side="left")
+        tk.Frame(card, bg=palette["separator"], height=1).pack(
+            fill="x", padx=layout["section_pad_x"]
+        )
+        return card
 
-    def row(label_text):
-        frame = tk.Frame(parent, bg=palette["panel_bg"])
-        frame.pack(fill="x", padx=12, pady=3)
+    def row(card, label_text):
+        frame = tk.Frame(card, bg=palette["row_bg"])
+        frame.pack(fill="x", padx=layout["section_pad_x"], pady=3)
         tk.Label(
             frame,
             text=label_text,
-            bg=palette["panel_bg"],
+            bg=palette["row_bg"],
             fg=palette["text"],
             font=label_font,
-            width=14,
+            width=layout["label_width"],
             anchor="w",
         ).pack(side="left")
-        return frame
+        controls = tk.Frame(frame, bg=palette["row_bg"])
+        controls.pack(side="left", padx=(14, 0))
+        return controls
+
+    def row_separator(card):
+        tk.Frame(card, bg=palette["separator"], height=1).pack(
+            fill="x", padx=layout["section_pad_x"]
+        )
+
+    def combo(parent_row, variable, values, width=20):
+        return ttk.Combobox(
+            parent_row,
+            textvariable=variable,
+            values=values,
+            state="readonly",
+            width=width,
+            style="Settings.TCombobox",
+            font=control_font,
+        )
+
+    def entry(parent_row, variable, width=20):
+        return tk.Entry(
+            parent_row,
+            textvariable=variable,
+            width=width,
+            bg=palette["field_bg"],
+            fg=palette["text"],
+            insertbackground=palette["text"],
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=palette["inner_border"],
+            highlightcolor=palette["accent"],
+            font=control_font,
+        )
+
+    def small_button(parent_row, text, command):
+        return tk.Button(
+            parent_row,
+            text=text,
+            bd=0,
+            relief="flat",
+            bg=palette["button_bg"],
+            fg=palette["text"],
+            activebackground=palette["button_hover"],
+            activeforeground=palette["text"],
+            cursor="hand2",
+            padx=9,
+            pady=4,
+            font=(config.BUBBLE_FONT_FAMILY, 8),
+            command=command,
+        )
 
     language_var = tk.StringVar(value=SETTINGS["language"])
     model_var = tk.StringVar(value=SETTINGS["model"])
+    model_order_var = tk.StringVar(
+        value=SETTINGS.get("model_order", settings.DEFAULT_SETTINGS["model_order"])
+    )
+    model_display_var = tk.StringVar(
+        value=settings.model_dropdown_label(
+            SETTINGS["model"],
+            custom_models=SETTINGS.get("custom_models"),
+        )
+    )
     theme_var = tk.StringVar(value=SETTINGS["theme"])
     # DoubleVar: ttk.Scale writes floats; validate_settings coerces to int on save.
     opacity_var = tk.DoubleVar(value=SETTINGS["opacity"])
+    opacity_display_var = tk.StringVar(value=f"{int(opacity_var.get())}%")
     format_var = tk.StringVar(value=SETTINGS["text_format"])
     save_var = tk.StringVar(value=SETTINGS["save_location"])
     hotkey_var = tk.StringVar(value=SETTINGS["hotkey"])
+    model_info_var = tk.StringVar(
+        value=settings.model_tier_summary(
+            model_var.get(),
+            custom_models=SETTINGS.get("custom_models"),
+            include_revision=False,
+        )
+    )
 
-    # 1. Transcription
-    section("Transcription")
-    r = row("Input Language")
-    ttk.Combobox(r, textvariable=language_var, values=settings.LANGUAGE_CHOICES,
-                 state="readonly", width=18).pack(side="left")
-    r = row("Model")
-    ttk.Combobox(r, textvariable=model_var, values=settings.MODEL_CHOICES,
-                 state="readonly", width=18).pack(side="left")
-    tk.Button(r, text="ⓘ", bd=0, bg=palette["panel_bg"], fg=palette["muted_text"],
-              activebackground=palette["panel_bg"], cursor="hand2",
-              command=lambda: show_info_tip(settings.MODEL_TIER_INFO)).pack(side="left", padx=4)
+    def update_opacity_display(*_args):
+        try:
+            opacity_display_var.set(f"{int(float(opacity_var.get()))}%")
+        except (tk.TclError, ValueError):
+            opacity_display_var.set("")
 
-    # 2. Interface & Output
-    section("Interface & Output")
-    r = row("App Theme")
-    ttk.Combobox(r, textvariable=theme_var, values=settings.THEME_CHOICES,
-                 state="readonly", width=18).pack(side="left")
-    r = row("Panel Opacity")
-    ttk.Scale(r, from_=config.OPACITY_MIN, to=config.OPACITY_MAX, orient="horizontal",
-              variable=opacity_var, length=150).pack(side="left")
-    r = row("Text Format")
-    ttk.Combobox(r, textvariable=format_var, values=settings.FORMAT_CHOICES,
-                 state="readonly", width=18).pack(side="left")
-    r = row("Save Location")
-    tk.Entry(r, textvariable=save_var, width=16, bg=palette["field_bg"],
-             fg=palette["text"], insertbackground=palette["text"], bd=1).pack(side="left")
-    tk.Button(r, text="…", bd=0, bg=palette["button_bg"], fg=palette["text"],
-              activebackground=palette["button_hover"], cursor="hand2",
-              command=lambda: pick_save_location(save_var)).pack(side="left", padx=4)
+    opacity_var.trace_add("write", update_opacity_display)
+    transcription = section_card("Transcription", "wave")
+    r = row(transcription, "Input Language")
+    combo(r, language_var, settings.LANGUAGE_CHOICES).pack(side="left")
+    row_separator(transcription)
+    r = row(transcription, "Model")
+    model_combo = combo(
+        r,
+        model_display_var,
+        settings.model_dropdown_options(
+            SETTINGS.get("custom_models"),
+            order=model_order_var.get(),
+        ),
+        width=34,
+    )
+    model_combo.pack(side="left")
+    small_button(
+        r,
+        "Info",
+        lambda: show_info_tip(settings.model_tier_info_text(custom_models=SETTINGS.get("custom_models"))),
+    ).pack(side="left", padx=(8, 0))
+    download_button = small_button(
+        r,
+        "Download",
+        lambda: start_model_download_from_settings(model_var, download_button, model_info_var),
+    )
+    download_button.pack(side="left", padx=(8, 0))
+    small_button(r, "Add custom", add_custom_model_dialog).pack(side="left", padx=(8, 0))
 
-    # 3. Commands & Hotkeys
-    section("Commands & Hotkeys")
-    r = row("Start/Stop Key")
-    tk.Entry(r, textvariable=hotkey_var, width=18, bg=palette["field_bg"],
-             fg=palette["text"], insertbackground=palette["text"], bd=1).pack(side="left")
-    tk.Label(parent, text="Click the bubble to record (always on). "
-                          "Hotkey example: <ctrl>+<alt>+d. Leave blank to disable.",
-             bg=palette["panel_bg"], fg=palette["muted_text"],
-             font=(config.BUBBLE_FONT_FAMILY, 8), wraplength=320, justify="left").pack(
-             fill="x", padx=12, pady=(2, 6))
+    def refresh_model_dropdown_values() -> None:
+        values = settings.model_dropdown_options(
+            SETTINGS.get("custom_models"),
+            order=model_order_var.get(),
+        )
+        model_combo.configure(values=values)
+        model_display_var.set(
+            settings.model_dropdown_label(
+                model_var.get(),
+                custom_models=SETTINGS.get("custom_models"),
+            )
+        )
+
+    def update_model_choice_from_display(*_args) -> None:
+        model_var.set(
+            settings.model_choice_from_dropdown_label(
+                model_display_var.get(),
+                custom_models=SETTINGS.get("custom_models"),
+                order=model_order_var.get(),
+            )
+        )
+
+    def update_model_controls(*_args):
+        model_info_var.set(
+            settings.model_tier_summary(
+                model_var.get(),
+                custom_models=SETTINGS.get("custom_models"),
+                include_revision=False,
+            )
+        )
+        state = model_download_button_state(
+            model_var.get(),
+            custom_models=SETTINGS.get("custom_models"),
+        )
+        download_button.configure(
+            text=state["text"],
+            state="normal" if state["enabled"] else "disabled",
+        )
+
+    model_display_var.trace_add("write", update_model_choice_from_display)
+    model_var.trace_add("write", update_model_controls)
+    model_order_var.trace_add("write", lambda *_args: refresh_model_dropdown_values())
+    update_model_controls()
+    tk.Label(
+        transcription,
+        textvariable=model_info_var,
+        bg=palette["row_bg"],
+        fg=palette["muted_text"],
+        font=(config.BUBBLE_FONT_FAMILY, layout["model_info_font_size"]),
+        wraplength=layout["help_wraplength"],
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", padx=layout["section_pad_x"], pady=(0, 7))
+    row_separator(transcription)
+    r = row(transcription, "Model Order")
+    combo(r, model_order_var, settings.MODEL_ORDER_CHOICES, width=14).pack(side="left")
+    row_separator(transcription)
+    r = row(transcription, "Model folder")
+    tk.Label(
+        r,
+        text=str(settings.huggingface_cache_root()),
+        bg=palette["row_bg"],
+        fg=palette["muted_text"],
+        font=(config.BUBBLE_FONT_FAMILY, layout["model_folder_font_size"]),
+        anchor="w",
+    ).pack(side="left")
+    small_button(r, "Open folder", open_model_cache_folder).pack(side="left", padx=(8, 0))
+    small_button(r, "Copy path", copy_model_cache_path).pack(side="left", padx=(8, 0))
+    tk.Label(
+        transcription,
+        text="Manual models: use a faster-whisper/CTranslate2 folder with config.json, model.bin, tokenizer.json, and vocabulary.*.",
+        bg=palette["row_bg"],
+        fg=palette["muted_text"],
+        font=(config.BUBBLE_FONT_FAMILY, layout["manual_model_font_size"]),
+        wraplength=layout["help_wraplength"],
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", padx=layout["section_pad_x"], pady=(0, 7))
+
+    interface = section_card("Interface & Output", "monitor")
+    r = row(interface, "App Theme")
+    combo(r, theme_var, settings.THEME_CHOICES).pack(side="left")
+    row_separator(interface)
+    r = row(interface, "Panel Opacity")
+    tk.Scale(
+        r,
+        from_=config.OPACITY_MIN,
+        to=config.OPACITY_MAX,
+        orient="horizontal",
+        variable=opacity_var,
+        length=156,
+        bg=palette["row_bg"],
+        fg=palette["text"],
+        activebackground=palette["accent"],
+        troughcolor=palette["button_border"],
+        highlightthickness=0,
+        bd=0,
+        showvalue=False,
+        sliderlength=16,
+        width=9,
+    ).pack(side="left", padx=(0, 8))
+    tk.Label(
+        r,
+        textvariable=opacity_display_var,
+        bg=palette["row_bg"],
+        fg=palette["text"],
+        font=control_font,
+        padx=8,
+        pady=3,
+    ).pack(side="left")
+    row_separator(interface)
+    r = row(interface, "Text Format")
+    combo(r, format_var, settings.FORMAT_CHOICES).pack(side="left")
+    row_separator(interface)
+    r = row(interface, "Save Location")
+    entry(r, save_var, width=18).pack(side="left")
+    small_button(r, "Browse", lambda: pick_save_location(save_var)).pack(side="left", padx=8)
+
+    commands = section_card("Commands & Hotkeys", "keyboard")
+    commands.configure(height=layout["commands_min_height"])
+    commands.pack_propagate(False)
+    r = row(commands, "Start/Stop Key")
+    hotkey_entry = entry(r, hotkey_var, width=20)
+    hotkey_entry.pack(side="left")
+    bind_hotkey_capture(hotkey_entry, hotkey_var)
+    tk.Label(
+        commands,
+        text=layout["help_text"],
+        bg=palette["row_bg"],
+        fg=palette["muted_text"],
+        font=(config.BUBBLE_FONT_FAMILY, layout["hotkey_help_font_size"]),
+        wraplength=layout["help_wraplength"],
+        justify="left",
+        anchor="w",
+    ).pack(fill="x", padx=layout["section_pad_x"], pady=(1, 8))
 
     return {
         "language": language_var, "model": model_var, "theme": theme_var,
         "opacity": opacity_var, "text_format": format_var,
         "save_location": save_var, "hotkey": hotkey_var,
+        "model_order": model_order_var,
     }
 
 
 def build_settings_nav(parent, palette, vars_) -> None:
-    bar = tk.Frame(parent, bg=palette["panel_bg"])
-    bar.pack(side="bottom", fill="x", padx=12, pady=12)
+    layout = settings_panel_layout()
+    shell = tk.Frame(parent, bg=palette["separator"], height=1)
+    shell.pack(side="bottom", fill="x", pady=(4, 0))
+    bar = tk.Frame(parent, bg=palette["footer_bg"])
+    bar.pack(side="bottom", fill="x", padx=layout["outer_pad_x"], pady=(8, 10))
 
-    def nav_button(text, command, icon_name):
+    def nav_button(container, text, command, icon_name, variant="secondary"):
+        is_primary = variant == "primary"
+        ring = tk.Frame(
+            container,
+            bg=palette["accent"] if is_primary else palette["button_border"],
+        )
         button = tk.Button(
-            bar, text=text, bd=0, relief="flat",
-            bg=palette["button_bg"], fg=palette["text"],
-            activebackground=palette["button_hover"], activeforeground=palette["text"],
-            cursor="hand2", padx=9, pady=6,
-            font=(config.BUBBLE_FONT_FAMILY, 9), command=command,
+            ring, text=text, bd=0, relief="flat",
+            bg=palette["accent_bg"] if is_primary else palette["button_bg"],
+            fg=palette["accent_text"] if is_primary else palette["text"],
+            activebackground=palette["accent_hover"] if is_primary else palette["button_hover"],
+            activeforeground=palette["accent_text"] if is_primary else palette["text"],
+            cursor="hand2",
+            padx=10 if is_primary else 8,
+            pady=6,
+            font=(config.BUBBLE_FONT_FAMILY, 8),
+            command=command,
         )
         if icons.PIL_AVAILABLE:
             try:
-                photo = glyph_photo(icon_name, palette["text"], 15)
+                icon_color = palette["accent_text"] if is_primary else palette["text"]
+                photo = glyph_photo(icon_name, icon_color, 14)
                 button.configure(image=photo, compound="left", padx=7)
                 button.image = photo
             except Exception as exc:
                 log_exception("Settings nav glyph failed", exc)
-        return button
+        button.pack(fill="both", expand=True, padx=1, pady=1)
+        return ring
 
-    nav_button(" Save", lambda: apply_settings_from_form(vars_), "save").pack(side="left")
-    nav_button(" History", show_history_panel, "history").pack(side="left", padx=6)
-    nav_button(" Export", export_all_history, "export").pack(side="left")
-    nav_button(" Close app", quit_app, "close").pack(side="right")
+    left = tk.Frame(bar, bg=palette["footer_bg"])
+    left.pack(side="left")
+    right = tk.Frame(bar, bg=palette["footer_bg"])
+    right.pack(side="right")
+
+    nav_button(left, "History", show_history_panel, "history").pack(side="left")
+    nav_button(left, "Export", export_all_history, "export").pack(side="left", padx=(8, 14))
+    tk.Frame(left, bg=palette["separator"], width=1, height=26).pack(side="left", padx=(0, 14), pady=3)
+    nav_button(left, "Close app", quit_app, "close").pack(side="left")
+    nav_button(
+        right,
+        "Save changes",
+        lambda: apply_settings_from_form(vars_),
+        "save",
+        "primary",
+    ).pack(side="right")
 
 
 def apply_settings_from_form(vars_) -> None:
@@ -2246,6 +3286,28 @@ def apply_settings_from_form(vars_) -> None:
     previous_model = SETTINGS["model"]
     new_values = {key: var.get() for key, var in vars_.items()}
     new_values["bubble_position"] = SETTINGS.get("bubble_position")
+    new_values["custom_models"] = SETTINGS.get("custom_models", [])
+
+    requested_model = new_values.get("model", previous_model)
+    if (
+        config.LOCAL_FILES_ONLY
+        and requested_model != previous_model
+        and not settings.model_is_available_locally(
+            requested_model,
+            custom_models=new_values.get("custom_models"),
+        )
+    ):
+        log(
+            "Selected model is not cached locally; keeping current model: "
+            f"{settings.model_tier_summary(requested_model)}"
+        )
+        new_values["model"] = previous_model
+        model_var = vars_.get("model")
+        if model_var is not None:
+            try:
+                model_var.set(previous_model)
+            except Exception:
+                pass
 
     SETTINGS = settings.validate_settings(
         settings.merge_settings(settings.DEFAULT_SETTINGS, new_values)
@@ -2260,7 +3322,91 @@ def apply_settings_from_form(vars_) -> None:
         threading.Thread(target=reload_model_for_settings,
                          args=(previous_model,), daemon=True).start()
 
-    close_settings_panel()
+    refresh_settings_panel()
+
+
+def render_settings_panel(panel) -> None:
+    for child in panel.winfo_children():
+        child.destroy()
+
+    palette = settings_visual_palette(current_palette())
+    layout = settings_panel_layout()
+
+    outer = tk.Frame(panel, bg=palette["panel_border"])
+    outer.pack(fill="both", expand=True)
+    body = tk.Frame(outer, bg=palette["panel_bg"])
+    body.pack(fill="both", expand=True, padx=1, pady=1)
+
+    style = ttk.Style(panel)
+    apply_dark_combobox_style(style, palette)
+
+    header = tk.Frame(body, bg=palette["panel_bg"])
+    header.pack(fill="x", padx=layout["header_pad_x"], pady=(16, 10))
+    title_stack = tk.Frame(header, bg=palette["panel_bg"])
+    title_stack.pack(side="left", fill="x", expand=True)
+    tk.Label(
+        title_stack,
+        text="Settings",
+        bg=palette["panel_bg"],
+        fg=palette["text"],
+        font=(config.BUBBLE_FONT_FAMILY, 15, "bold"),
+        anchor="w",
+    ).pack(fill="x")
+    tk.Label(
+        title_stack,
+        text="Transcription, output, and shortcut controls",
+        bg=palette["panel_bg"],
+        fg=palette["muted_text"],
+        font=(config.BUBBLE_FONT_FAMILY, 8),
+        anchor="w",
+    ).pack(fill="x", pady=(3, 0))
+
+    close_shell = tk.Frame(
+        header,
+        bg=palette["button_border"],
+        width=layout["close_button_size"],
+        height=layout["close_button_size"],
+    )
+    close_shell.pack(side="right", padx=(14, 0))
+    close_shell.pack_propagate(False)
+    close_button = tk.Button(
+        close_shell,
+        text="x",
+        bd=0,
+        relief="flat",
+        bg=palette["button_bg"],
+        fg=palette["text"],
+        activebackground=palette["button_hover"],
+        activeforeground=palette["text"],
+        cursor="hand2",
+        padx=0,
+        pady=0,
+        font=(config.BUBBLE_FONT_FAMILY, 7),
+        command=close_settings_panel,
+    )
+    if icons.PIL_AVAILABLE:
+        try:
+            photo = glyph_photo("close", palette["text"], 13)
+            close_button.configure(image=photo, text="")
+            close_button.image = photo
+        except Exception as exc:
+            log_exception("Settings close glyph failed", exc)
+    close_button.pack(fill="both", expand=True, padx=1, pady=1)
+    bind_panel_drag(panel, header)
+
+    form = tk.Frame(body, bg=palette["panel_bg"])
+    vars_ = build_settings_form(form, palette)
+    build_settings_nav(body, palette, vars_)
+    form.pack(fill="x", padx=layout["outer_pad_x"], pady=(0, 0))
+
+
+def refresh_settings_panel() -> None:
+    if settings_panel is not None and settings_panel.winfo_exists():
+        render_settings_panel(settings_panel)
+        try:
+            settings_panel.attributes("-alpha", current_alpha())
+        except tk.TclError:
+            pass
 
 
 def show_settings_panel() -> None:
@@ -2276,8 +3422,8 @@ def show_settings_panel() -> None:
         settings_panel.lift()
         return
 
-    palette = current_palette()
-    width, height = 360, 470
+    layout = settings_panel_layout()
+    width, height = layout["width"], layout["height"]
 
     panel = tk.Toplevel(root)
     settings_panel = panel
@@ -2289,26 +3435,7 @@ def show_settings_panel() -> None:
     except tk.TclError:
         pass
 
-    outer = tk.Frame(panel, bg=palette["panel_border"])
-    outer.pack(fill="both", expand=True)
-    body = tk.Frame(outer, bg=palette["panel_bg"])
-    body.pack(fill="both", expand=True, padx=1, pady=1)
-
-    style = ttk.Style(panel)
-    apply_dark_combobox_style(style, palette)
-
-    header = tk.Frame(body, bg=palette["panel_bg"])
-    header.pack(fill="x", padx=12, pady=(10, 6))
-    tk.Label(header, text="Settings", bg=palette["panel_bg"], fg=palette["text"],
-             font=(config.BUBBLE_FONT_FAMILY, 11, "bold")).pack(side="left")
-    tk.Button(header, text="✕", bd=0, bg=palette["panel_bg"], fg=palette["muted_text"],
-              activebackground=palette["panel_bg"], cursor="hand2",
-              command=close_settings_panel).pack(side="right")
-    bind_panel_drag(panel, header)
-
-    vars_ = build_settings_form(body, palette)
-    build_settings_nav(body, palette, vars_)
-
+    render_settings_panel(panel)
     panel.bind("<Escape>", lambda _e: close_settings_panel())
     panel.protocol("WM_DELETE_WINDOW", close_settings_panel)
     panel.focus_force()
@@ -2372,6 +3499,69 @@ def normalize_hotkey(raw: str) -> str:
     return (raw or "").strip()
 
 
+def hotkey_from_key_event(event) -> Optional[str]:
+    keysym = getattr(event, "keysym", "") or ""
+    char = getattr(event, "char", "") or ""
+
+    if keysym in {"BackSpace", "Delete", "Escape"}:
+        return ""
+    if keysym in {
+        "Control_L", "Control_R", "Alt_L", "Alt_R",
+        "Shift_L", "Shift_R", "Meta_L", "Meta_R",
+        "Win_L", "Win_R", "Super_L", "Super_R",
+    }:
+        return None
+
+    special_keys = {
+        "Return": "<enter>",
+        "KP_Enter": "<enter>",
+        "space": "<space>",
+        "Tab": "<tab>",
+        "Home": "<home>",
+        "End": "<end>",
+        "Prior": "<page_up>",
+        "Next": "<page_down>",
+        "Up": "<up>",
+        "Down": "<down>",
+        "Left": "<left>",
+        "Right": "<right>",
+    }
+
+    if keysym in special_keys:
+        key = special_keys[keysym]
+    elif len(char) == 1 and char.strip():
+        key = char.lower()
+    elif len(keysym) == 1:
+        key = keysym.lower()
+    else:
+        key = f"<{keysym.lower()}>"
+
+    try:
+        state = int(getattr(event, "state", 0) or 0)
+    except (TypeError, ValueError):
+        state = 0
+
+    modifiers: List[str] = []
+    if state & 0x0004:
+        modifiers.append("<ctrl>")
+    if state & 0x0008:
+        modifiers.append("<alt>")
+    if state & 0x0001 and key.startswith("<"):
+        modifiers.append("<shift>")
+
+    return "+".join([*modifiers, key])
+
+
+def bind_hotkey_capture(entry_widget, hotkey_var) -> None:
+    def capture(event):
+        value = hotkey_from_key_event(event)
+        if value is not None:
+            hotkey_var.set(value)
+        return "break"
+
+    entry_widget.bind("<KeyPress>", capture)
+
+
 def is_valid_hotkey(raw: str) -> bool:
     candidate = normalize_hotkey(raw)
     if not candidate:
@@ -2384,8 +3574,9 @@ def is_valid_hotkey(raw: str) -> bool:
 
 
 def on_hotkey_toggle() -> None:
-    if root is not None:
-        root.after(0, toggle_recording_from_shortcut)
+    if shutting_down or root is None:
+        return
+    root.after(0, toggle_recording_from_shortcut)
 
 
 def start_hotkey_listener(raw: str):
@@ -2542,6 +3733,9 @@ def click_is_inside_bubble(x: int, y: int) -> bool:
 
 
 def on_global_mouse_click(x, y, button, pressed) -> None:
+    if shutting_down:
+        return
+
     if not pressed:
         return
 
@@ -2662,6 +3856,46 @@ def on_bubble_release(event):
     return "break"
 
 
+def shutdown_now() -> None:
+    global shutting_down
+
+    if shutting_down:
+        return
+
+    shutting_down = True
+    log("Shutting down (fast exit).")
+
+    if control_stop_event is not None:
+        try:
+            control_stop_event.set()
+        except Exception:
+            pass
+
+    # Stop global low-level hooks before slow CUDA/PortAudio teardown can run.
+    for stopper in (mouse_listener, hotkey_listener):
+        try:
+            if stopper is not None:
+                stopper.stop()
+        except Exception:
+            pass
+
+    stop_tray_icon()
+
+    try:
+        if audio_stream is not None:
+            audio_stream.stop()
+    except Exception:
+        pass
+
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+    os._exit(0)
+
+
 def quit_app(event=None) -> None:
     log("Exiting.")
 
@@ -2672,7 +3906,12 @@ def quit_app(event=None) -> None:
         except Exception:
             pass
 
-        root.destroy()
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
+    shutdown_now()
 
 
 def bind_bubble_events(app, label) -> None:
@@ -2935,7 +4174,7 @@ def show_startup_error(message: str) -> None:
 
 
 def main(initial_action: str = "run-app") -> None:
-    global root, bubble, model, control_stop_event, hotkey_listener
+    global root, bubble, model, control_stop_event, hotkey_listener, mouse_listener, audio_stream
 
     if session_log_file is None:
         initialize_logging()
@@ -2968,13 +4207,13 @@ def main(initial_action: str = "run-app") -> None:
     log("Starting microphone stream...")
 
     try:
-        stream = sd.InputStream(
+        audio_stream = sd.InputStream(
             samplerate=config.SAMPLE_RATE,
             channels=config.CHANNELS,
             dtype="float32",
             callback=audio_callback,
         )
-        stream.start()
+        audio_stream.start()
     except Exception as exc:
         log_exception("Microphone stream failed at startup", exc)
         show_startup_error(
@@ -2986,19 +4225,20 @@ def main(initial_action: str = "run-app") -> None:
         release_single_instance_lock()
         return
 
-    listener = mouse.Listener(on_click=on_global_mouse_click)
-    listener.start()
+    mouse_listener = mouse.Listener(on_click=on_global_mouse_click)
+    mouse_listener.start()
 
     hotkey_listener = start_hotkey_listener(SETTINGS["hotkey"])
 
     root = create_bubble_window()
+    start_tray_icon()
     control_stop_event = start_control_server()
     release_launch_lock()
 
     if initial_action == "resident":
-        root.withdraw()
+        hide_bubble_window()
     elif initial_action == "show-history":
-        root.withdraw()
+        hide_bubble_window()
         root.after(0, show_history_panel)
     elif initial_action == "start-recording":
         root.after(0, toggle_recording_from_shortcut)
@@ -3023,13 +4263,17 @@ def main(initial_action: str = "run-app") -> None:
         if control_stop_event is not None:
             control_stop_event.set()
 
-        listener.stop()
+        if mouse_listener is not None:
+            mouse_listener.stop()
 
         if hotkey_listener is not None:
             hotkey_listener.stop()
 
-        stream.stop()
-        stream.close()
+        stop_tray_icon()
+
+        if audio_stream is not None:
+            audio_stream.stop()
+            audio_stream.close()
         release_single_instance_lock()
 
 

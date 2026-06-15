@@ -164,5 +164,58 @@ def render_glyph(name: str, color_hex: str, size: int) -> "Image.Image":
         _round_line(draw, (cx, s * 0.30), (cx, s * 0.54), stroke * 0.8, color)
         _round_line(draw, (cx - s * 0.10, s * 0.44), (cx, s * 0.54), stroke * 0.8, color)
         _round_line(draw, (cx + s * 0.10, s * 0.44), (cx, s * 0.54), stroke * 0.8, color)
+    elif name == "copy":
+        draw.rounded_rectangle(
+            [s * 0.34, s * 0.24, s * 0.74, s * 0.64],
+            radius=s * 0.055,
+            outline=color,
+            width=max(1, int(stroke * 0.75)),
+        )
+        draw.rounded_rectangle(
+            [s * 0.24, s * 0.36, s * 0.64, s * 0.76],
+            radius=s * 0.055,
+            outline=color,
+            width=max(1, int(stroke * 0.75)),
+        )
+    elif name == "tray":
+        draw.rounded_rectangle(
+            [s * 0.22, s * 0.56, s * 0.78, s * 0.76],
+            radius=s * 0.05,
+            outline=color,
+            width=max(1, int(stroke * 0.75)),
+        )
+        _round_line(draw, (cx, s * 0.22), (cx, s * 0.50), stroke * 0.8, color)
+        _round_line(draw, (cx - s * 0.12, s * 0.39), (cx, s * 0.50), stroke * 0.8, color)
+        _round_line(draw, (cx + s * 0.12, s * 0.39), (cx, s * 0.50), stroke * 0.8, color)
+    elif name == "wave":
+        for offset in (-0.18, 0.0, 0.18):
+            x = cx + s * offset
+            _round_line(draw, (x, cy - s * 0.22), (x, cy + s * 0.22), stroke * 0.55, color)
+        _round_line(draw, (cx - s * 0.32, cy - s * 0.10), (cx - s * 0.32, cy + s * 0.10), stroke * 0.55, color)
+        _round_line(draw, (cx + s * 0.32, cy - s * 0.10), (cx + s * 0.32, cy + s * 0.10), stroke * 0.55, color)
+    elif name == "monitor":
+        draw.rounded_rectangle(
+            [s * 0.18, s * 0.24, s * 0.82, s * 0.62],
+            radius=s * 0.045,
+            outline=color,
+            width=max(1, int(stroke * 0.7)),
+        )
+        _round_line(draw, (cx, s * 0.62), (cx, s * 0.74), stroke * 0.65, color)
+        _round_line(draw, (cx - s * 0.16, s * 0.76), (cx + s * 0.16, s * 0.76), stroke * 0.65, color)
+    elif name == "keyboard":
+        draw.rounded_rectangle(
+            [s * 0.16, s * 0.28, s * 0.84, s * 0.72],
+            radius=s * 0.055,
+            outline=color,
+            width=max(1, int(stroke * 0.7)),
+        )
+        key_r = s * 0.018
+        for row_y in (0.41, 0.52):
+            for col_x in (0.30, 0.40, 0.50, 0.60, 0.70):
+                draw.ellipse(
+                    [s * col_x - key_r, s * row_y - key_r, s * col_x + key_r, s * row_y + key_r],
+                    fill=color,
+                )
+        _round_line(draw, (s * 0.36, s * 0.63), (s * 0.64, s * 0.63), stroke * 0.55, color)
 
     return img.resize((size, size), Image.LANCZOS)

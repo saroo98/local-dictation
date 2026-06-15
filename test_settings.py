@@ -43,6 +43,169 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(settings.model_tier_to_name("Fast"), "small")
         self.assertEqual(settings.model_tier_to_name("Balanced"), "large-v3-turbo")
         self.assertEqual(settings.model_tier_to_name("High Accuracy"), "large-v3")
+        self.assertEqual(settings.model_tier_to_name("Ultra Fast English"), "tiny.en")
+        self.assertEqual(settings.model_tier_to_name("Compact Multilingual"), "base")
+        self.assertEqual(settings.model_tier_to_name("Medium Quality"), "medium")
+
+    def test_builtin_model_choices_keep_default_three_first(self):
+        self.assertEqual(settings.MODEL_CHOICES[:3], ["Fast", "Balanced", "High Accuracy"])
+        self.assertEqual(
+            settings.MODEL_CHOICES[3:],
+            ["Ultra Fast English", "Compact Multilingual", "Medium Quality"],
+        )
+
+    def test_model_choices_can_be_ordered_by_speed_or_accuracy(self):
+        self.assertEqual(
+            settings.model_choices(order="Speed"),
+            [
+                "Ultra Fast English",
+                "Compact Multilingual",
+                "Fast",
+                "Medium Quality",
+                "Balanced",
+                "High Accuracy",
+            ],
+        )
+        self.assertEqual(
+            settings.model_choices(order="Accuracy"),
+            [
+                "High Accuracy",
+                "Balanced",
+                "Medium Quality",
+                "Fast",
+                "Compact Multilingual",
+                "Ultra Fast English",
+            ],
+        )
+
+    def test_model_dropdown_labels_include_model_name_and_size(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            options = settings.model_dropdown_options(
+                order="Speed",
+                cache_root=Path(temp_dir),
+            )
+
+        self.assertTrue(options[0].startswith("Ultra Fast English - tiny.en - 75 MB"))
+        self.assertIn("Fast - small - 464 MB", options)
+        self.assertTrue(options[-1].startswith("High Accuracy - large-v3 - 2.95 GB"))
+
+    def test_model_choice_can_be_resolved_from_dropdown_label(self):
+        label = "Fast - small - 464 MB"
+
+        self.assertEqual(settings.model_choice_from_dropdown_label(label), "Fast")
+
+    def test_model_order_setting_is_validated(self):
+        values = settings.validate_settings({"model_order": "Accuracy"})
+        self.assertEqual(values["model_order"], "Accuracy")
+
+        values = settings.validate_settings({"model_order": "Newest"})
+        self.assertEqual(values["model_order"], settings.DEFAULT_SETTINGS["model_order"])
+
+    def test_model_details_include_repo_revision_and_local_size(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_root = Path(temp_dir)
+            repo_dir = cache_root / "models--Systran--faster-whisper-large-v3"
+            snapshot = repo_dir / "snapshots" / "abc123"
+            snapshot.mkdir(parents=True)
+            (repo_dir / "refs").mkdir()
+            (repo_dir / "refs" / "main").write_text("abc123", encoding="utf-8")
+            (snapshot / "model.bin").write_bytes(b"x" * 1024)
+
+            details = settings.model_tier_details("High Accuracy", cache_root=cache_root)
+
+        self.assertEqual(details["tier"], "High Accuracy")
+        self.assertEqual(details["model_name"], "large-v3")
+        self.assertEqual(details["repo_id"], "Systran/faster-whisper-large-v3")
+        self.assertEqual(details["revision"], "abc123")
+        self.assertEqual(details["size_text"], "1 KB")
+        self.assertTrue(details["available"])
+
+    def test_missing_model_details_mark_tier_unavailable(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            details = settings.model_tier_details("Fast", cache_root=Path(temp_dir))
+
+        self.assertEqual(details["repo_id"], "Systran/faster-whisper-small")
+        self.assertFalse(details["available"])
+        self.assertEqual(details["size_text"], "not installed locally")
+
+    def test_metadata_only_cache_does_not_mark_model_available(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_root = Path(temp_dir)
+            repo_dir = cache_root / "models--Systran--faster-whisper-base"
+            repo_dir.mkdir(parents=True)
+            (repo_dir / "refs").mkdir()
+            (repo_dir / "refs" / "main").write_text("abc123", encoding="utf-8")
+            (repo_dir / "blobs").mkdir()
+            (repo_dir / "blobs" / "metadata-only").write_text("x", encoding="utf-8")
+
+            details = settings.model_tier_details("Compact Multilingual", cache_root=cache_root)
+
+        self.assertFalse(details["available"])
+        self.assertEqual(details["size_text"], "not installed locally")
+
+    def test_model_tier_summary_is_human_readable(self):
+        summary = settings.model_tier_summary("Fast", cache_root=Path("Z:/definitely-missing"))
+
+        self.assertIn("Fast", summary)
+        self.assertIn("small", summary)
+        self.assertIn("Systran/faster-whisper-small", summary)
+        self.assertIn("not installed locally", summary)
+
+    def test_custom_model_local_folder_is_accepted_when_ctranslate2_files_exist(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_dir = Path(temp_dir) / "local-model"
+            model_dir.mkdir()
+            for filename in ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt"):
+                (model_dir / filename).write_text("x", encoding="utf-8")
+
+            values = settings.validate_settings(
+                {
+                    "custom_models": [{"name": "Local Custom", "source": str(model_dir)}],
+                    "model": "Local Custom",
+                }
+            )
+
+        self.assertEqual(values["custom_models"], [{"name": "Local Custom", "source": str(model_dir)}])
+        self.assertEqual(values["model"], "Local Custom")
+        self.assertEqual(
+            settings.model_tier_to_name("Local Custom", custom_models=values["custom_models"]),
+            str(model_dir),
+        )
+
+    def test_custom_model_validation_rejects_duplicates_and_invalid_sources(self):
+        values = settings.validate_settings(
+            {
+                "custom_models": [
+                    {"name": "Duplicate", "source": "Systran/faster-whisper-base"},
+                    {"name": "Duplicate", "source": "Systran/faster-whisper-medium"},
+                    {"name": "Bad Source", "source": "not a valid local path"},
+                ],
+                "model": "Bad Source",
+            }
+        )
+
+        self.assertEqual(values["custom_models"], [{"name": "Duplicate", "source": "Systran/faster-whisper-base"}])
+        self.assertEqual(values["model"], settings.DEFAULT_SETTINGS["model"])
+
+    def test_custom_hugging_face_repo_details_can_be_unavailable_until_downloaded(self):
+        values = settings.validate_settings(
+            {
+                "custom_models": [
+                    {"name": "Repo Custom", "source": "Systran/faster-whisper-base"},
+                ],
+                "model": "Repo Custom",
+            }
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            details = settings.model_tier_details(
+                "Repo Custom",
+                cache_root=Path(temp_dir),
+                custom_models=values["custom_models"],
+            )
+
+        self.assertEqual(details["repo_id"], "Systran/faster-whisper-base")
+        self.assertFalse(details["available"])
+        self.assertEqual(details["source_type"], "repo")
 
     def test_palette_for_light_and_dark(self):
         self.assertEqual(settings.palette_for("Light Mode"), settings.LIGHT_PALETTE)

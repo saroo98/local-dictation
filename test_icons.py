@@ -30,10 +30,22 @@ class RenderTests(unittest.TestCase):
             self.assertEqual(img.size, (38, 38))
 
     def test_glyph_icons_are_rgba(self):
-        for name in ["history", "settings", "close", "export", "save"]:
+        for name in ["history", "settings", "close", "export", "save", "copy", "tray", "wave", "monitor", "keyboard"]:
             img = icons.render_glyph(name, "#f2f2f2", 22)
             self.assertEqual(img.size, (22, 22))
             self.assertEqual(img.mode, "RGBA")
+
+    def test_copy_glyph_draws_visible_pixels(self):
+        img = icons.render_glyph("copy", "#f2f2f2", 22)
+        pixels = img.get_flattened_data() if hasattr(img, "get_flattened_data") else img.getdata()
+        self.assertTrue(any(pixel[3] for pixel in pixels))
+
+    def test_settings_section_glyphs_draw_visible_pixels(self):
+        for name in ["wave", "monitor", "keyboard"]:
+            with self.subTest(name=name):
+                img = icons.render_glyph(name, "#f2f2f2", 22)
+                pixels = img.get_flattened_data() if hasattr(img, "get_flattened_data") else img.getdata()
+                self.assertTrue(any(pixel[3] for pixel in pixels))
 
 
 if __name__ == "__main__":

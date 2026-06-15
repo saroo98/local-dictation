@@ -1,11 +1,13 @@
 # Core (cross-platform)
 faster-whisper>=1.0
+huggingface-hub>=0.20
 sounddevice>=0.4
 numpy>=1.26
 pyperclip>=1.8
 pyautogui>=0.9
 pynput>=1.7
 pillow>=10.0
+pystray>=0.19
 
 # Windows only. comtypes powers UI Automation (auto-paste into focused chat boxes).
 comtypes>=1.2
