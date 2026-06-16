@@ -1,0 +1,78 @@
+export type ModelOrder = 'Speed' | 'Accuracy'
+export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemePreset = 'neutral' | 'green' | 'blue'
+export type AppStatus = 'idle' | 'recording' | 'transcribing' | 'paste-ready' | 'error'
+
+export interface Settings {
+  language: string
+  model: string
+  model_order: ModelOrder
+  theme: string
+  opacity: number
+  text_format: string
+  save_location: string
+  hotkey: string
+  bubble_position: [number, number]
+  custom_models: CustomModel[]
+}
+
+export interface CustomModel {
+  name: string
+  source: string
+}
+
+export interface ModelInfo {
+  tier: string
+  model_name: string
+  repo_id: string
+  description: string
+  cache_dir: string
+  available: boolean
+  revision: string
+  size_bytes: number
+  size_text: string
+  source_type: 'builtin' | 'custom'
+  custom: boolean
+  speed_rank: number
+  accuracy_rank: number
+}
+
+export interface HistoryEntry {
+  text: string
+  created_at: string
+}
+
+export interface AppState {
+  recording: boolean
+  transcribing: boolean
+  waiting_for_target_click: boolean
+  status: AppStatus
+  latestTranscript: string
+  activeModel: string
+  activeLanguage: string
+}
+
+export interface UpdateCheck {
+  current: string
+  latest?: string
+  url?: string
+}
+
+export interface Bridge {
+  getSettings(): Promise<Settings>
+  saveSettings(settings: Settings): Promise<void>
+  getHistory(): Promise<HistoryEntry[]>
+  clearHistory(): Promise<void>
+  exportHistory(format: 'txt' | 'md'): Promise<string>
+  getModels(order: ModelOrder): Promise<ModelInfo[]>
+  downloadModel(choice: string): Promise<void>
+  openModelFolder(choice: string): Promise<void>
+  copyModelPath(choice: string): Promise<void>
+  addCustomModel(name: string, source: string): Promise<void>
+  getState(): Promise<AppState>
+  onState(callback: (state: AppState) => void): () => void
+  startRecording(): Promise<void>
+  stopRecording(): Promise<void>
+  toggleRecording(): Promise<void>
+  checkForUpdates(): Promise<UpdateCheck>
+}
