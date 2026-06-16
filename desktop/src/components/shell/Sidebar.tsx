@@ -44,8 +44,8 @@ export function Sidebar({ navigation }: SidebarProps) {
       </nav>
 
       <div className="mt-auto rounded-xl border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Stage 4</p>
-        <p className="mt-1 leading-5">Tauri can start and monitor the Python backend. Browser review stays mock-backed.</p>
+        <p className="font-medium text-foreground">Stage 5</p>
+        <p className="mt-1 leading-5">Tauri can use the packaged backend sidecar. Browser review stays mock-backed.</p>
       </div>
     </aside>
   )

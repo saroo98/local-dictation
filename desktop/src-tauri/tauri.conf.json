@@ -5,7 +5,7 @@
   "identifier": "com.local.dictation",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:frontend",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -25,7 +25,8 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all"
+    "active": true,
+    "targets": ["nsis"],
+    "externalBin": ["binaries/local-dictation-backend"]
   }
 }

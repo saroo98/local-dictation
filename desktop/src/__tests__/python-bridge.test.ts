@@ -104,7 +104,7 @@ describe('python bridge', () => {
     await expect(bridge.getHistory()).rejects.toThrow('Unknown command: nope')
 
     invokeMock.mockResolvedValueOnce('error')
-    await expect(bridge.getState()).rejects.toThrow('does not support the Stage 4 JSON bridge')
+    await expect(bridge.getState()).rejects.toThrow('does not support the Stage 5 JSON bridge')
 
     invokeMock.mockReset()
     invokeMock.mockRejectedValueOnce(new Error('Connection refused'))
@@ -202,7 +202,7 @@ describe('python bridge', () => {
       message: 'Local backend ready.',
       log_path: 'C:\\local-dictation\\dictation_debug.log',
       health: {
-        version: '0.4.0-backend-manager',
+        version: '0.5.0-sidecar-ready',
         pid: 1234,
         status: 'idle',
         protocol_version: 4,

@@ -14,6 +14,8 @@ desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+desktop/src-tauri/binaries/
+build/pyinstaller-backend/
 
 # Local development notes and prototypes that are not part of the public app.
 CODEX_HANDOFF.md

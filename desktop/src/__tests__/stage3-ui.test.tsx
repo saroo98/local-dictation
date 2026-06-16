@@ -166,10 +166,10 @@ describe('stage 3 UI behavior', () => {
     expect(screen.getByText('Balanced')).toBeInTheDocument()
   })
 
-  it('describes Stage 4 backend controls in Help/About', async () => {
+  it('describes Stage 5 backend sidecar controls in Help/About', async () => {
     renderWithBridge(<HelpAboutPage />, createTestBridge())
 
-    expect(await screen.findByText(/Stage 4 can start and monitor the local Python backend/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Stage 5 can start the packaged local backend sidecar/i)).toBeInTheDocument()
     expect(screen.getByText(/Real backend start\/stop controls require the Tauri runtime/i)).toBeInTheDocument()
   })
 })

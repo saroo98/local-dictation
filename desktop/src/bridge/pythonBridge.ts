@@ -22,7 +22,7 @@ interface BridgeResponse<T> {
 
 const localBridgeUnavailableMessage = 'Local Dictation is not running. Start the Python app first.'
 const incompatibleLocalBridgeMessage =
-  'Local Dictation is running, but it does not support the Stage 4 JSON bridge. Close the old Python app, then start the backend from this Tauri build.'
+  'Local Dictation is running, but it does not support the Stage 5 JSON bridge. Close the old Python app, then start the backend from this Tauri build.'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message

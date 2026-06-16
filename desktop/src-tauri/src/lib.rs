@@ -9,6 +9,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tauri_plugin_shell::{process::CommandChild, ShellExt};
 
 const CONTROL_HOST: &str = "127.0.0.1";
 const CONTROL_PORT: u16 = 49_731;
@@ -16,6 +17,20 @@ const CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
 const BACKEND_START_POLL: Duration = Duration::from_millis(250);
 const BACKEND_START_ATTEMPTS: usize = 8;
 const BACKEND_STOP_ATTEMPTS: usize = 12;
+const SIDECAR_BINARY_NAME: &str = "local-dictation-backend";
+
+#[derive(Debug, PartialEq, Eq)]
+enum BackendLaunchStrategy {
+    Sidecar,
+    PythonFallback,
+    MissingRequiredSidecar,
+}
+
+#[derive(Debug)]
+enum ManagedBackendChild {
+    Python(Child),
+    Sidecar(CommandChild),
+}
 
 #[derive(Debug, Deserialize)]
 struct BridgeResponse<T> {
@@ -48,7 +63,7 @@ struct BackendStatus {
 
 #[derive(Debug, Default)]
 struct BackendManager {
-    child: Option<Child>,
+    child: Option<ManagedBackendChild>,
     last_error: Option<String>,
 }
 
@@ -58,19 +73,36 @@ impl BackendManager {
     }
 
     fn refresh_child(&mut self) {
-        let Some(child) = self.child.as_mut() else {
-            return;
-        };
-
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                self.last_error = Some(format!("Backend process exited before it became healthy: {status}"));
-                self.child = None;
+        if let Some(child) = self.child.as_mut() {
+            match child {
+                ManagedBackendChild::Python(child) => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        self.last_error = Some(format!(
+                            "Backend process exited before it became healthy: {status}"
+                        ));
+                        self.child = None;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.last_error =
+                            Some(format!("Could not inspect backend process: {error}"));
+                        self.child = None;
+                    }
+                },
+                ManagedBackendChild::Sidecar(_) => {}
             }
-            Ok(None) => {}
-            Err(error) => {
-                self.last_error = Some(format!("Could not inspect backend process: {error}"));
-                self.child = None;
+        }
+    }
+
+    fn take_and_kill_child(&mut self) {
+        if let Some(child) = self.child.take() {
+            match child {
+                ManagedBackendChild::Python(mut child) => {
+                    let _ = child.kill();
+                }
+                ManagedBackendChild::Sidecar(child) => {
+                    let _ = child.kill();
+                }
             }
         }
     }
@@ -132,6 +164,24 @@ fn health_from_bridge() -> Result<BackendHealth, String> {
     bridge_json_call("health")
 }
 
+fn backend_sidecar_args() -> [&'static str; 1] {
+    ["--api"]
+}
+
+fn choose_backend_launch_strategy(
+    debug_build: bool,
+    sidecar_available: bool,
+    python_available: bool,
+) -> BackendLaunchStrategy {
+    if sidecar_available {
+        return BackendLaunchStrategy::Sidecar;
+    }
+    if debug_build && python_available {
+        return BackendLaunchStrategy::PythonFallback;
+    }
+    BackendLaunchStrategy::MissingRequiredSidecar
+}
+
 fn repo_root() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(root) = manifest_dir
@@ -146,6 +196,17 @@ fn repo_root() -> PathBuf {
 
 fn fallback_root() -> PathBuf {
     PathBuf::from(r"C:\local-dictation")
+}
+
+fn sidecar_source_binary_path() -> PathBuf {
+    repo_root()
+        .join("desktop")
+        .join("src-tauri")
+        .join("binaries")
+        .join(format!(
+            "{SIDECAR_BINARY_NAME}-{}.exe",
+            option_env!("TAURI_ENV_TARGET_TRIPLE").unwrap_or("x86_64-pc-windows-msvc")
+        ))
 }
 
 fn log_path() -> String {
@@ -241,10 +302,32 @@ fn status_error(message: impl Into<String>) -> BackendStatus {
     }
 }
 
+fn status_from_health_error(error: &str) -> BackendStatus {
+    if error.contains("Local bridge returned invalid JSON") {
+        return BackendStatus {
+            status: "unhealthy".to_string(),
+            owned: false,
+            message: "A legacy Python backend is already using the Local Dictation port, but it does not support the JSON health command. Close the old backend before starting the packaged backend from Tauri.".to_string(),
+            log_path: log_path(),
+            health: None,
+        };
+    }
+
+    status_not_running("Backend not running.")
+}
+
 fn current_backend_status(manager: &mut BackendManager) -> BackendStatus {
-    if let Ok(health) = health_from_bridge() {
-        manager.last_error = None;
-        return status_ready(health, manager.owned());
+    match health_from_bridge() {
+        Ok(health) => {
+            manager.last_error = None;
+            return status_ready(health, manager.owned());
+        }
+        Err(error) => {
+            let unhealthy = status_from_health_error(&error);
+            if unhealthy.status == "unhealthy" {
+                return unhealthy;
+            }
+        }
     }
 
     manager.refresh_child();
@@ -260,7 +343,7 @@ fn current_backend_status(manager: &mut BackendManager) -> BackendStatus {
     status_not_running("Backend not running.")
 }
 
-fn spawn_backend_process() -> Result<Child, String> {
+fn spawn_backend_process() -> Result<ManagedBackendChild, String> {
     let python = python_executable()?;
     let script = backend_script()?;
     let workdir = backend_workdir(&script);
@@ -283,7 +366,34 @@ fn spawn_backend_process() -> Result<Child, String> {
 
     command
         .spawn()
+        .map(ManagedBackendChild::Python)
         .map_err(|error| format!("Failed to start Python backend: {error}"))
+}
+
+fn spawn_sidecar_backend(app: &tauri::AppHandle) -> Result<ManagedBackendChild, String> {
+    let (_rx, child) = app
+        .shell()
+        .sidecar(SIDECAR_BINARY_NAME)
+        .map_err(|error| format!("Could not prepare backend sidecar: {error}"))?
+        .args(backend_sidecar_args())
+        .spawn()
+        .map_err(|error| format!("Failed to start backend sidecar: {error}"))?;
+    Ok(ManagedBackendChild::Sidecar(child))
+}
+
+fn spawn_backend(app: &tauri::AppHandle) -> Result<ManagedBackendChild, String> {
+    let debug_build = cfg!(debug_assertions);
+    let sidecar_available = !debug_build || sidecar_source_binary_path().exists();
+    let python_available = python_executable().is_ok();
+
+    match choose_backend_launch_strategy(debug_build, sidecar_available, python_available) {
+        BackendLaunchStrategy::Sidecar => spawn_sidecar_backend(app),
+        BackendLaunchStrategy::PythonFallback => spawn_backend_process(),
+        BackendLaunchStrategy::MissingRequiredSidecar => Err(format!(
+            "Backend sidecar is required for packaged builds. Build it first with npm run build:backend. Expected source binary: {}",
+            sidecar_source_binary_path().to_string_lossy()
+        )),
+    }
 }
 
 fn lock_manager<'a>(
@@ -306,16 +416,25 @@ fn backend_status(manager: tauri::State<'_, Mutex<BackendManager>>) -> Result<Ba
 }
 
 #[tauri::command]
-fn backend_start(manager: tauri::State<'_, Mutex<BackendManager>>) -> Result<BackendStatus, String> {
+fn backend_start(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, Mutex<BackendManager>>,
+) -> Result<BackendStatus, String> {
     let mut manager = lock_manager(&manager)?;
 
     if let Ok(health) = health_from_bridge() {
         return Ok(status_ready(health, manager.owned()));
     }
+    if let Err(error) = health_from_bridge() {
+        let unhealthy = status_from_health_error(&error);
+        if unhealthy.status == "unhealthy" {
+            return Ok(unhealthy);
+        }
+    }
 
     manager.refresh_child();
     if !manager.owned() {
-        manager.child = Some(spawn_backend_process()?);
+        manager.child = Some(spawn_backend(&app)?);
         manager.last_error = None;
     }
 
@@ -360,16 +479,16 @@ fn backend_stop(manager: tauri::State<'_, Mutex<BackendManager>>) -> Result<Back
         }
     }
 
-    if let Some(child) = manager.child.as_mut() {
-        let _ = child.kill();
-    }
-    manager.child = None;
+    manager.take_and_kill_child();
 
     Ok(status_not_running("Backend stopped."))
 }
 
 #[tauri::command]
-fn backend_restart(manager: tauri::State<'_, Mutex<BackendManager>>) -> Result<BackendStatus, String> {
+fn backend_restart(
+    app: tauri::AppHandle,
+    manager: tauri::State<'_, Mutex<BackendManager>>,
+) -> Result<BackendStatus, String> {
     {
         let mut manager = lock_manager(&manager)?;
         if manager.owned() {
@@ -381,20 +500,18 @@ fn backend_restart(manager: tauri::State<'_, Mutex<BackendManager>>) -> Result<B
                     break;
                 }
             }
-            if let Some(child) = manager.child.as_mut() {
-                let _ = child.kill();
-            }
-            manager.child = None;
+            manager.take_and_kill_child();
         }
     }
 
-    backend_start(manager)
+    backend_start(app, manager)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(BackendManager::default()))
+        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             bridge_call,
             backend_health,
@@ -405,4 +522,40 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Local Dictation desktop shell");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backend_launch_strategy_uses_sidecar_before_python_fallback() {
+        assert_eq!(
+            choose_backend_launch_strategy(true, true, true),
+            BackendLaunchStrategy::Sidecar
+        );
+        assert_eq!(
+            choose_backend_launch_strategy(true, false, true),
+            BackendLaunchStrategy::PythonFallback
+        );
+        assert_eq!(
+            choose_backend_launch_strategy(false, false, true),
+            BackendLaunchStrategy::MissingRequiredSidecar
+        );
+    }
+
+    #[test]
+    fn sidecar_launch_uses_expected_binary_name_and_api_args() {
+        assert_eq!(SIDECAR_BINARY_NAME, "local-dictation-backend");
+        assert_eq!(backend_sidecar_args(), ["--api"]);
+    }
+
+    #[test]
+    fn invalid_json_health_response_is_reported_as_legacy_backend() {
+        let status = status_from_health_error("Local bridge returned invalid JSON: expected value at line 1 column 1");
+
+        assert_eq!(status.status, "unhealthy");
+        assert!(!status.owned);
+        assert!(status.message.contains("legacy Python backend"));
+    }
 }

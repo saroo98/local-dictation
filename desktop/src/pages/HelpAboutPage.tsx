@@ -53,7 +53,7 @@ export function HelpAboutPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
             <p>No cloud transcription, telemetry, analytics, CDN fonts, or automatic network calls are included.</p>
-            <p>Stage 4 can start and monitor the local Python backend in development Tauri builds.</p>
+            <p>Stage 5 can start the packaged local backend sidecar in Tauri builds, with a Python fallback in debug mode.</p>
             <p>Browser mode remains mock-backed. Real backend start/stop controls require the Tauri runtime.</p>
           </CardContent>
         </Card>
@@ -103,7 +103,7 @@ export function HelpAboutPage() {
             <CardTitle>Version</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">0.4.0-backend-manager</p>
+            <p className="text-sm text-muted-foreground">0.5.0-sidecar-ready</p>
             <Button type="button" variant="outline" onClick={() => void checkUpdates()}>
               Check for updates
             </Button>
