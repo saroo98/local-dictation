@@ -1,0 +1,139 @@
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --font-sans: "Geist Variable", "Segoe UI", system-ui, sans-serif;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
+:root {
+  color-scheme: light;
+  --background: 42 28% 97%;
+  --foreground: 222 30% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 30% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 30% 10%;
+  --primary: 220 10% 20%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 42 24% 93%;
+  --secondary-foreground: 222 25% 16%;
+  --muted: 42 18% 92%;
+  --muted-foreground: 220 8% 42%;
+  --accent: 220 10% 20%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 7 66% 45%;
+  --border: 220 18% 84%;
+  --input: 220 18% 84%;
+  --ring: 220 12% 34%;
+  --radius: 0.85rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 220 24% 6%;
+  --foreground: 220 20% 96%;
+  --card: 220 22% 9%;
+  --card-foreground: 220 20% 96%;
+  --popover: 220 22% 9%;
+  --popover-foreground: 220 20% 96%;
+  --primary: 210 22% 90%;
+  --primary-foreground: 220 24% 7%;
+  --secondary: 220 18% 14%;
+  --secondary-foreground: 220 18% 94%;
+  --muted: 220 16% 15%;
+  --muted-foreground: 220 12% 68%;
+  --accent: 210 22% 90%;
+  --accent-foreground: 220 24% 7%;
+  --destructive: 5 70% 56%;
+  --border: 220 16% 22%;
+  --input: 220 16% 24%;
+  --ring: 210 22% 82%;
+}
+
+.theme-green {
+  --primary: 154 60% 32%;
+  --accent: 154 54% 40%;
+  --ring: 154 54% 40%;
+}
+
+.theme-green.dark {
+  --primary: 151 54% 62%;
+  --accent: 151 46% 50%;
+  --ring: 151 54% 62%;
+}
+
+.theme-blue {
+  --primary: 213 74% 45%;
+  --accent: 213 74% 52%;
+  --ring: 213 74% 52%;
+}
+
+.theme-blue.dark {
+  --primary: 210 92% 70%;
+  --accent: 210 82% 62%;
+  --ring: 210 92% 70%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 900px;
+  min-height: 600px;
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.12), transparent 34rem),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.ld-shell-grid {
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+.ld-card-shadow {
+  box-shadow: 0 18px 70px hsl(220 30% 4% / 0.16);
+}
+
+.ld-soft-border {
+  border: 1px solid hsl(var(--border) / 0.78);
+}
+
+.ld-focus {
+  outline: 2px solid hsl(var(--ring) / 0.7);
+  outline-offset: 2px;
+}
