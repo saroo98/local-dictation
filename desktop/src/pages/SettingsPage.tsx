@@ -21,19 +21,33 @@ export function SettingsPage() {
   const theme = useTheme()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [saved, setSaved] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    void bridge.getSettings().then(setSettings)
+    void bridge
+      .getSettings()
+      .then((next) => {
+        setSettings(next)
+        setLoadError(null)
+      })
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : 'Could not load settings')
+      })
   }, [bridge])
 
-  if (!settings) return <PageHeader title="Settings" description="Loading settings..." />
+  if (!settings) return <PageHeader title="Settings" description={loadError ?? 'Loading settings...'} />
 
   async function saveChanges() {
     if (!settings) return
-    await bridge.saveSettings(settings)
-    setSaved(true)
-    toast.success('Settings saved')
-    window.setTimeout(() => setSaved(false), 1800)
+    try {
+      const savedSettings = await bridge.saveSettings(settings)
+      if (savedSettings) setSettings(savedSettings)
+      setSaved(true)
+      toast.success('Settings saved')
+      window.setTimeout(() => setSaved(false), 1800)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save settings')
+    }
   }
 
   return (

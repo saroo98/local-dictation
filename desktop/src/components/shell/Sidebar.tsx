@@ -17,7 +17,7 @@ export function Sidebar({ navigation }: SidebarProps) {
         </div>
         <div>
           <p className="text-sm font-semibold leading-none">Local Dictation</p>
-          <p className="mt-1 text-xs text-muted-foreground">Mock desktop UI</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tauri desktop UI</p>
         </div>
       </div>
 
@@ -44,8 +44,8 @@ export function Sidebar({ navigation }: SidebarProps) {
       </nav>
 
       <div className="mt-auto rounded-xl border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Phase 1</p>
-        <p className="mt-1 leading-5">Reviewable UI only. No microphone, model, filesystem, or Python backend calls.</p>
+        <p className="font-medium text-foreground">Stage 4</p>
+        <p className="mt-1 leading-5">Tauri can start and monitor the Python backend. Browser review stays mock-backed.</p>
       </div>
     </aside>
   )

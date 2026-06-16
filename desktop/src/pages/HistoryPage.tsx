@@ -15,7 +15,7 @@ export function HistoryPage() {
   const [query, setQuery] = useState('')
 
   useEffect(() => {
-    void bridge.getHistory().then(setEntries)
+    void bridge.getHistory().then(setEntries).catch(() => setEntries([]))
   }, [bridge])
 
   const filtered = useMemo(() => {
@@ -25,14 +25,22 @@ export function HistoryPage() {
   }, [entries, query])
 
   async function clearHistory() {
-    await bridge.clearHistory()
-    setEntries([])
-    toast.success('History cleared')
+    try {
+      await bridge.clearHistory()
+      setEntries(await bridge.getHistory())
+      toast.success('History cleared')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not clear history')
+    }
   }
 
   async function exportHistory(format: 'txt' | 'md') {
-    await bridge.exportHistory(format)
-    toast.success(`Mock ${format.toUpperCase()} export prepared`)
+    try {
+      const path = await bridge.exportHistory(format)
+      toast.success(`Exported to ${path}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not export ${format.toUpperCase()}`)
+    }
   }
 
   return (

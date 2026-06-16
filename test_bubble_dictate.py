@@ -146,6 +146,12 @@ class CliControlTests(unittest.TestCase):
             "show-history",
         )
 
+    def test_parse_cli_action_detects_api(self) -> None:
+        self.assertEqual(
+            bubble_dictate.parse_cli_action(["--api"]),
+            "api",
+        )
+
     def test_control_command_for_existing_instance_maps_start_recording_to_toggle(self) -> None:
         self.assertEqual(
             bubble_dictate.control_command_for_existing_instance("start-recording"),
@@ -157,6 +163,436 @@ class CliControlTests(unittest.TestCase):
             bubble_dictate.control_command_for_existing_instance("show-history"),
             "show-history",
         )
+
+    def test_control_command_for_existing_instance_maps_api_to_health_check(self) -> None:
+        command = bubble_dictate.control_command_for_existing_instance("api")
+
+        self.assertIsNotNone(command)
+        self.assertEqual(json.loads(command), {"cmd": "health", "args": {}})
+
+
+class ControlBridgeTests(unittest.TestCase):
+    def _json_response(self, command: str) -> dict:
+        return json.loads(bubble_dictate.handle_control_command(command))
+
+    class ChunkedSocket:
+        def __init__(self, payload: bytes, chunk_size: int = 8) -> None:
+            self.payload = payload
+            self.chunk_size = chunk_size
+            self.offset = 0
+
+        def recv(self, _size: int) -> bytes:
+            if self.offset >= len(self.payload):
+                return b""
+            next_offset = min(len(self.payload), self.offset + self.chunk_size)
+            chunk = self.payload[self.offset:next_offset]
+            self.offset = next_offset
+            return chunk
+
+    def test_read_control_command_reads_large_json_until_newline(self) -> None:
+        payload = json.dumps({"cmd": "get-settings", "args": {"padding": "x" * 3000}})
+        fake_socket = self.ChunkedSocket((payload + "\n").encode("utf-8"), chunk_size=257)
+
+        self.assertEqual(bubble_dictate.read_control_command(fake_socket), payload)
+
+    def test_read_control_command_accepts_client_close_without_newline(self) -> None:
+        payload = json.dumps({"cmd": "get-state", "args": {}})
+        fake_socket = self.ChunkedSocket(payload.encode("utf-8"), chunk_size=5)
+
+        self.assertEqual(bubble_dictate.read_control_command(fake_socket), payload)
+
+    def test_read_control_command_rejects_oversized_payload(self) -> None:
+        fake_socket = self.ChunkedSocket(b"x" * 40, chunk_size=10)
+
+        with self.assertRaises(ValueError):
+            bubble_dictate.read_control_command(fake_socket, max_bytes=32)
+
+    def test_legacy_control_commands_still_return_plain_ok_or_error(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        bubble_dictate.root = FakeRoot()
+        try:
+            self.assertEqual(bubble_dictate.handle_control_command("toggle-record"), "ok")
+            self.assertEqual(bubble_dictate.handle_control_command("show-history"), "ok")
+            self.assertEqual(bubble_dictate.handle_control_command("unknown"), "error")
+        finally:
+            bubble_dictate.root = original_root
+
+        self.assertEqual([call[1] for call in calls], [bubble_dictate.toggle_recording_from_shortcut, bubble_dictate.show_history_panel])
+
+    def test_json_control_rejects_invalid_json_and_unknown_commands(self) -> None:
+        invalid = self._json_response("{not json")
+        unknown = self._json_response(json.dumps({"cmd": "delete-everything", "args": {}}))
+
+        self.assertFalse(invalid["ok"])
+        self.assertIn("Invalid JSON", invalid["error"])
+        self.assertFalse(unknown["ok"])
+        self.assertIn("Unknown command", unknown["error"])
+
+    def test_json_control_get_settings_returns_validated_settings(self) -> None:
+        with patch.object(
+            bubble_dictate.settings,
+            "load_settings",
+            return_value={**bubble_dictate.settings.DEFAULT_SETTINGS, "language": "Arabic", "opacity": 88},
+        ):
+            response = self._json_response(json.dumps({"cmd": "get-settings", "args": {}}))
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["language"], "Arabic")
+        self.assertEqual(response["data"]["opacity"], 88)
+        self.assertIn("custom_models", response["data"])
+
+    def test_json_control_get_history_returns_newest_entries_first(self) -> None:
+        entries = [
+            bubble_dictate.TranscriptHistoryEntry("old", "2026-06-16T10:00:00"),
+            bubble_dictate.TranscriptHistoryEntry("new", "2026-06-16T11:00:00"),
+        ]
+
+        with patch.object(bubble_dictate, "load_transcript_history_entries", return_value=entries):
+            response = self._json_response(json.dumps({"cmd": "get-history", "args": {}}))
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(
+            response["data"],
+            [
+                {"text": "new", "created_at": "2026-06-16T11:00:00"},
+                {"text": "old", "created_at": "2026-06-16T10:00:00"},
+            ],
+        )
+
+    def test_json_control_list_models_respects_requested_order(self) -> None:
+        response = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Accuracy"}}))
+
+        self.assertTrue(response["ok"])
+        tiers = [item["tier"] for item in response["data"]]
+        self.assertEqual(tiers[0], "High Accuracy")
+        self.assertEqual(tiers[-1], "Ultra Fast English")
+        self.assertIn("speed_rank", response["data"][0])
+        self.assertIn("accuracy_rank", response["data"][0])
+
+    def test_json_control_get_state_returns_current_status(self) -> None:
+        original = (
+            bubble_dictate.recording,
+            bubble_dictate.transcribing,
+            bubble_dictate.waiting_for_target_click,
+            bubble_dictate.latest_transcript,
+            dict(bubble_dictate.SETTINGS),
+        )
+        try:
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+                bubble_dictate.waiting_for_target_click = True
+                bubble_dictate.latest_transcript = "Ready text"
+            bubble_dictate.SETTINGS["model"] = "Fast"
+            bubble_dictate.SETTINGS["language"] = "Arabic"
+
+            response = self._json_response(json.dumps({"cmd": "get-state", "args": {}}))
+        finally:
+            with bubble_dictate.state_lock:
+                (
+                    bubble_dictate.recording,
+                    bubble_dictate.transcribing,
+                    bubble_dictate.waiting_for_target_click,
+                    bubble_dictate.latest_transcript,
+                ) = original[:4]
+            bubble_dictate.SETTINGS = original[4]
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["status"], "paste-ready")
+        self.assertEqual(response["data"]["latestTranscript"], "Ready text")
+        self.assertEqual(response["data"]["activeModel"], "Fast")
+        self.assertEqual(response["data"]["activeLanguage"], "Arabic")
+
+    def test_json_control_health_returns_backend_metadata(self) -> None:
+        original_owner = bubble_dictate.backend_owner
+        original_start = bubble_dictate.backend_started_monotonic
+        try:
+            bubble_dictate.backend_owner = "api"
+            bubble_dictate.backend_started_monotonic = bubble_dictate.time.monotonic() - 12.5
+
+            response = self._json_response(json.dumps({"cmd": "health", "args": {}}))
+        finally:
+            bubble_dictate.backend_owner = original_owner
+            bubble_dictate.backend_started_monotonic = original_start
+
+        self.assertTrue(response["ok"])
+        data = response["data"]
+        self.assertEqual(data["pid"], bubble_dictate.os.getpid())
+        self.assertEqual(data["status"], "idle")
+        self.assertEqual(data["protocol_version"], 4)
+        self.assertEqual(data["backend_owner"], "api")
+        self.assertEqual(data["model"], bubble_dictate.SETTINGS["model"])
+        self.assertEqual(data["language"], bubble_dictate.SETTINGS["language"])
+        self.assertIn("device", data)
+        self.assertGreaterEqual(data["uptime_seconds"], 12)
+
+    def test_json_control_backend_owner_returns_launch_mode(self) -> None:
+        original_owner = bubble_dictate.backend_owner
+        try:
+            bubble_dictate.backend_owner = "resident"
+            response = self._json_response(json.dumps({"cmd": "backend-owner", "args": {}}))
+        finally:
+            bubble_dictate.backend_owner = original_owner
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], "resident")
+
+    def test_json_control_shutdown_backend_schedules_fast_shutdown_path(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        bubble_dictate.root = FakeRoot()
+        try:
+            response = self._json_response(json.dumps({"cmd": "shutdown-backend", "args": {}}))
+        finally:
+            bubble_dictate.root = original_root
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"accepted": True})
+        self.assertEqual(calls, [(0, bubble_dictate.quit_app)])
+
+    def test_json_control_set_settings_saves_validated_settings(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+        requested = {
+            **bubble_dictate.settings.DEFAULT_SETTINGS,
+            "language": "Arabic",
+            "model": original_settings.get("model", "Balanced"),
+            "opacity": 90,
+        }
+
+        try:
+            with (
+                patch.object(bubble_dictate.settings, "save_settings") as save_settings,
+                patch.object(bubble_dictate, "restart_hotkey_listener") as restart_hotkey,
+                patch.object(bubble_dictate, "redraw_bubble_current_state") as redraw,
+                patch.object(bubble_dictate, "refresh_settings_panel") as refresh,
+            ):
+                response = self._json_response(json.dumps({"cmd": "set-settings", "args": {"settings": requested}}))
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["language"], "Arabic")
+        self.assertEqual(response["data"]["opacity"], 90)
+        save_settings.assert_called_once()
+        restart_hotkey.assert_called_once_with(response["data"]["hotkey"])
+        redraw.assert_called_once()
+        refresh.assert_called_once()
+
+    def test_json_control_set_settings_rejects_uncached_model_change(self) -> None:
+        original_settings = {**bubble_dictate.settings.DEFAULT_SETTINGS, "model": "Balanced"}
+        requested = {**original_settings, "model": "Fast"}
+
+        try:
+            bubble_dictate.SETTINGS = dict(original_settings)
+            with (
+                patch.object(bubble_dictate.config, "LOCAL_FILES_ONLY", True),
+                patch.object(bubble_dictate.settings, "model_is_available_locally", return_value=False),
+                patch.object(bubble_dictate.settings, "save_settings") as save_settings,
+            ):
+                response = self._json_response(json.dumps({"cmd": "set-settings", "args": {"settings": requested}}))
+        finally:
+            bubble_dictate.SETTINGS = bubble_dictate.settings.load_settings()
+
+        self.assertFalse(response["ok"])
+        self.assertIn("not installed locally", response["error"])
+        save_settings.assert_not_called()
+
+    def test_json_control_start_stop_toggle_recording_schedule_tk_callbacks(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        original_state = (bubble_dictate.recording, bubble_dictate.transcribing)
+        bubble_dictate.root = FakeRoot()
+        try:
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+            start = self._json_response(json.dumps({"cmd": "start-recording", "args": {}}))
+
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = True
+                bubble_dictate.transcribing = False
+            stop = self._json_response(json.dumps({"cmd": "stop-recording", "args": {}}))
+
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+            toggle = self._json_response(json.dumps({"cmd": "toggle-recording", "args": {}}))
+        finally:
+            bubble_dictate.root = original_root
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording, bubble_dictate.transcribing = original_state
+
+        self.assertTrue(start["ok"])
+        self.assertTrue(stop["ok"])
+        self.assertTrue(toggle["ok"])
+        self.assertEqual([call[0] for call in calls], [0, 0, 0])
+
+    def test_json_control_clear_history_writes_empty_history_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+            history_path.write_text(json.dumps([{"text": "old"}]), encoding="utf-8")
+
+            with patch.object(bubble_dictate.config, "TRANSCRIPT_HISTORY_FILE", history_path):
+                response = self._json_response(json.dumps({"cmd": "clear-history", "args": {}}))
+
+            self.assertTrue(response["ok"])
+            self.assertEqual(response["data"], [])
+            self.assertEqual(json.loads(history_path.read_text(encoding="utf-8")), [])
+
+    def test_json_control_export_history_writes_requested_format(self) -> None:
+        entries = [bubble_dictate.TranscriptHistoryEntry("hello", "2026-06-16T10:35:00")]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            requested = {
+                **bubble_dictate.settings.DEFAULT_SETTINGS,
+                "save_location": temp_dir,
+            }
+            with (
+                patch.object(bubble_dictate, "load_transcript_history_entries", return_value=entries),
+                patch.object(bubble_dictate, "SETTINGS", requested),
+            ):
+                txt = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "txt"}}))
+                md = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "md"}}))
+
+            self.assertTrue(txt["ok"])
+            self.assertTrue(md["ok"])
+            self.assertTrue(Path(txt["data"]).exists())
+            self.assertTrue(Path(md["data"]).exists())
+            self.assertEqual(Path(txt["data"]).suffix, ".txt")
+            self.assertEqual(Path(md["data"]).suffix, ".md")
+
+    def test_json_control_export_history_rejects_empty_history(self) -> None:
+        with patch.object(bubble_dictate, "load_transcript_history_entries", return_value=[]):
+            response = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "txt"}}))
+
+        self.assertFalse(response["ok"])
+        self.assertIn("No history", response["error"])
+
+    def test_json_control_download_model_tracks_background_status(self) -> None:
+        original_status = dict(getattr(bubble_dictate, "model_download_status", {}))
+
+        class ImmediateThread:
+            def __init__(self, target, daemon=False) -> None:
+                self.target = target
+                self.daemon = daemon
+
+            def start(self) -> None:
+                self.target()
+
+        try:
+            bubble_dictate.model_download_status = {}
+            with (
+                patch.object(bubble_dictate, "download_model_for_choice", return_value="ok") as download,
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = self._json_response(json.dumps({"cmd": "download-model", "args": {"choice": "Fast"}}))
+                models = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Speed"}}))
+        finally:
+            bubble_dictate.model_download_status = original_status
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"choice": "Fast", "status": "downloading"})
+        download.assert_called_once()
+        fast = next(item for item in models["data"] if item["tier"] == "Fast")
+        self.assertIn(fast["download_status"], {"idle", "installed"})
+
+    def test_json_control_download_model_failure_records_error_status(self) -> None:
+        original_status = dict(getattr(bubble_dictate, "model_download_status", {}))
+        original_details = bubble_dictate.settings.model_tier_details
+
+        class ImmediateThread:
+            def __init__(self, target, daemon=False) -> None:
+                self.target = target
+                self.daemon = daemon
+
+            def start(self) -> None:
+                self.target()
+
+        def unavailable_fast_details(choice, *args, **kwargs):
+            details = dict(original_details(choice, *args, **kwargs))
+            if choice == "Fast":
+                details["available"] = False
+            return details
+
+        try:
+            bubble_dictate.model_download_status = {}
+            with (
+                patch.object(bubble_dictate, "download_model_for_choice", side_effect=RuntimeError("network failed")),
+                patch.object(bubble_dictate.settings, "model_tier_details", side_effect=unavailable_fast_details),
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = self._json_response(json.dumps({"cmd": "download-model", "args": {"choice": "Fast"}}))
+                models = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Speed"}}))
+        finally:
+            bubble_dictate.model_download_status = original_status
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"choice": "Fast", "status": "downloading"})
+        fast = next(item for item in models["data"] if item["tier"] == "Fast")
+        self.assertEqual(fast["download_status"], "error")
+        self.assertIn("network failed", fast["download_error"])
+
+    def test_json_control_model_path_actions_return_paths(self) -> None:
+        with (
+            patch.object(bubble_dictate.os, "startfile") as startfile,
+            patch.object(bubble_dictate.pyperclip, "copy") as copy,
+        ):
+            opened = self._json_response(json.dumps({"cmd": "open-model-folder", "args": {"choice": "Fast"}}))
+            copied = self._json_response(json.dumps({"cmd": "copy-model-path", "args": {"choice": "Fast"}}))
+
+        self.assertTrue(opened["ok"])
+        self.assertTrue(copied["ok"])
+        self.assertIsInstance(opened["data"], str)
+        self.assertIsInstance(copied["data"], str)
+        startfile.assert_called_once()
+        copy.assert_called_once_with(copied["data"])
+
+    def test_json_control_add_custom_model_accepts_repo_and_rejects_invalid(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+
+        try:
+            bubble_dictate.SETTINGS = dict(bubble_dictate.settings.DEFAULT_SETTINGS)
+            with patch.object(bubble_dictate.settings, "save_settings") as save_settings:
+                accepted = self._json_response(
+                    json.dumps(
+                        {
+                            "cmd": "add-custom-model",
+                            "args": {"name": "Custom Repo", "source": "owner/model-name"},
+                        }
+                    )
+                )
+                rejected = self._json_response(
+                    json.dumps(
+                        {
+                            "cmd": "add-custom-model",
+                            "args": {"name": "Broken", "source": "not a repo or folder"},
+                        }
+                    )
+                )
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        self.assertTrue(accepted["ok"])
+        self.assertEqual(accepted["data"]["custom_models"], [{"name": "Custom Repo", "source": "owner/model-name"}])
+        self.assertFalse(rejected["ok"])
+        self.assertIn("valid Hugging Face repo", rejected["error"])
+        save_settings.assert_called_once()
 
 
 class ShortcutSpecTests(unittest.TestCase):

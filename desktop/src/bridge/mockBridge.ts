@@ -1,4 +1,4 @@
-import type { AppState, Bridge, HistoryEntry, ModelInfo, ModelOrder, Settings, UpdateCheck } from '@/bridge/types'
+import type { AppState, BackendHealth, BackendStatus, Bridge, HistoryEntry, ModelInfo, ModelOrder, Settings, UpdateCheck } from '@/bridge/types'
 import { historyFixtures } from '@/fixtures/history'
 import { modelFixtures } from '@/fixtures/models'
 import { defaultSettings } from '@/fixtures/settings'
@@ -29,6 +29,24 @@ export function createMockBridge(): Bridge {
     activeLanguage: settings.language,
   }
   const listeners = new Set<(next: AppState) => void>()
+  const mockBackendHealth: BackendHealth = {
+    version: '0.4.0-browser-mock',
+    pid: 0,
+    status: 'idle',
+    protocol_version: 4,
+    backend_owner: 'browser-mock',
+    model: settings.model,
+    language: settings.language,
+    device: 'mock',
+    uptime_seconds: 0,
+  }
+  let backendStatus: BackendStatus = {
+    status: 'ready',
+    owned: false,
+    message: 'Mock UI backend simulated. Tauri runtime is required to start Python.',
+    log_path: 'C:\\local-dictation\\dictation_debug.log',
+    health: mockBackendHealth,
+  }
 
   function emit(next: AppState) {
     state = next
@@ -56,6 +74,7 @@ export function createMockBridge(): Bridge {
       settings = { ...nextSettings, custom_models: [...nextSettings.custom_models] }
       localStorage.setItem(settingsKey, JSON.stringify(settings))
       emit({ ...state, activeModel: settings.model, activeLanguage: settings.language })
+      return { ...settings, custom_models: [...settings.custom_models] }
     },
     async getHistory() {
       return [...history]
@@ -85,10 +104,16 @@ export function createMockBridge(): Bridge {
         custom: true,
         speed_rank: 100 + index,
         accuracy_rank: 100 + index,
+        download_status: 'installed',
+        download_error: '',
       }))
-      return [...modelFixtures, ...customModels].sort((a, b) =>
-        order === 'Speed' ? a.speed_rank - b.speed_rank : a.accuracy_rank - b.accuracy_rank,
-      )
+      return [...modelFixtures, ...customModels]
+        .map((model) => ({
+          ...model,
+          download_status: model.available ? 'installed' : (model.download_status ?? 'idle'),
+          download_error: model.download_error ?? '',
+        }))
+        .sort((a, b) => (order === 'Speed' ? a.speed_rank - b.speed_rank : a.accuracy_rank - b.accuracy_rank))
     },
     async downloadModel() {
       await Promise.resolve()
@@ -145,6 +170,33 @@ export function createMockBridge(): Bridge {
     },
     async checkForUpdates(): Promise<UpdateCheck> {
       return { current: '0.1.0-phase-1', latest: '0.1.0-phase-1' }
+    },
+    async getBackendStatus() {
+      return { ...backendStatus, health: backendStatus.health ? { ...backendStatus.health } : undefined }
+    },
+    async startBackend() {
+      backendStatus = {
+        ...backendStatus,
+        message: 'Tauri runtime required. Browser mode keeps Python backend controls disabled.',
+      }
+      return { ...backendStatus, health: backendStatus.health ? { ...backendStatus.health } : undefined }
+    },
+    async stopBackend() {
+      backendStatus = {
+        ...backendStatus,
+        message: 'Tauri runtime required. Browser mode cannot stop Python.',
+      }
+      return { ...backendStatus, health: backendStatus.health ? { ...backendStatus.health } : undefined }
+    },
+    async restartBackend() {
+      backendStatus = {
+        ...backendStatus,
+        message: 'Tauri runtime required. Browser mode cannot restart Python.',
+      }
+      return { ...backendStatus, health: backendStatus.health ? { ...backendStatus.health } : undefined }
+    },
+    async getBackendHealth() {
+      return { ...mockBackendHealth, model: settings.model, language: settings.language }
     },
   }
 }

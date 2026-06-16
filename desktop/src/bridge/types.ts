@@ -2,6 +2,8 @@ export type ModelOrder = 'Speed' | 'Accuracy'
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ThemePreset = 'neutral' | 'green' | 'blue'
 export type AppStatus = 'idle' | 'recording' | 'transcribing' | 'paste-ready' | 'error'
+export type DownloadStatus = 'idle' | 'downloading' | 'installed' | 'error'
+export type BackendStatusKind = 'not_running' | 'starting' | 'ready' | 'unhealthy' | 'stopping' | 'error'
 
 export interface Settings {
   language: string
@@ -12,7 +14,7 @@ export interface Settings {
   text_format: string
   save_location: string
   hotkey: string
-  bubble_position: [number, number]
+  bubble_position: [number, number] | null
   custom_models: CustomModel[]
 }
 
@@ -31,15 +33,17 @@ export interface ModelInfo {
   revision: string
   size_bytes: number
   size_text: string
-  source_type: 'builtin' | 'custom'
+  source_type: 'builtin' | 'custom' | 'repo' | 'local'
   custom: boolean
   speed_rank: number
   accuracy_rank: number
+  download_status?: DownloadStatus
+  download_error?: string
 }
 
 export interface HistoryEntry {
   text: string
-  created_at: string
+  created_at: string | null
 }
 
 export interface AppState {
@@ -58,9 +62,32 @@ export interface UpdateCheck {
   url?: string
 }
 
+export interface BackendHealth {
+  version: string
+  pid: number
+  status: AppStatus
+  protocol_version: number
+  backend_owner: string
+  model: string
+  language: string
+  device: string
+  uptime_seconds: number
+}
+
+export interface BackendStatus {
+  status: BackendStatusKind
+  owned: boolean
+  message: string
+  log_path: string
+  health?: BackendHealth
+}
+
+export type BackendStartResult = BackendStatus
+export type BackendStopResult = BackendStatus
+
 export interface Bridge {
   getSettings(): Promise<Settings>
-  saveSettings(settings: Settings): Promise<void>
+  saveSettings(settings: Settings): Promise<Settings | void>
   getHistory(): Promise<HistoryEntry[]>
   clearHistory(): Promise<void>
   exportHistory(format: 'txt' | 'md'): Promise<string>
@@ -75,4 +102,9 @@ export interface Bridge {
   stopRecording(): Promise<void>
   toggleRecording(): Promise<void>
   checkForUpdates(): Promise<UpdateCheck>
+  getBackendStatus(): Promise<BackendStatus>
+  startBackend(): Promise<BackendStartResult>
+  stopBackend(): Promise<BackendStopResult>
+  restartBackend(): Promise<BackendStartResult>
+  getBackendHealth(): Promise<BackendHealth>
 }

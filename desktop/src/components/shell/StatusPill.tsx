@@ -18,9 +18,24 @@ export function StatusPill() {
 
   useEffect(() => {
     let mounted = true
-    void bridge.getState().then((next) => {
-      if (mounted) setState(next)
-    })
+    void bridge
+      .getState()
+      .then((next) => {
+        if (mounted) setState(next)
+      })
+      .catch(() => {
+        if (mounted) {
+          setState({
+            recording: false,
+            transcribing: false,
+            waiting_for_target_click: false,
+            status: 'error',
+            latestTranscript: '',
+            activeModel: '',
+            activeLanguage: '',
+          })
+        }
+      })
     const off = bridge.onState(setState)
     return () => {
       mounted = false

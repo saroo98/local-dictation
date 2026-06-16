@@ -13,6 +13,7 @@ logs/
 desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
+desktop/src-tauri/gen/
 
 # Local development notes and prototypes that are not part of the public app.
 CODEX_HANDOFF.md

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useBridge } from '@/bridge/bridgeContext'
@@ -13,17 +13,39 @@ export function ModelsPage() {
   const [order, setOrder] = useState<ModelOrder>('Speed')
   const [models, setModels] = useState<ModelInfo[]>([])
 
-  useEffect(() => {
-    void bridge.getModels(order).then(setModels)
+  const loadModels = useCallback(() => {
+    return bridge.getModels(order)
   }, [bridge, order])
 
-  async function refresh() {
-    setModels(await bridge.getModels(order))
-  }
+  const refresh = useCallback(async () => {
+    setModels(await loadModels())
+  }, [loadModels])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadModels()
+      .then((next) => {
+        if (!cancelled) setModels(next)
+      })
+      .catch(() => {
+        if (!cancelled) setModels([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loadModels])
+
+  useEffect(() => {
+    if (!models.some((model) => model.download_status === 'downloading')) return undefined
+    const interval = window.setInterval(() => {
+      void loadModels().then(setModels).catch(() => setModels([]))
+    }, 1500)
+    return () => window.clearInterval(interval)
+  }, [models, loadModels])
 
   return (
     <div>
-      <PageHeader title="Models" description="Mock model management for faster-whisper compatible local models. Downloads are not real in Phase 1." />
+      <PageHeader title="Models" description="Manage faster-whisper compatible local models through the active bridge." />
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <ModelOrderToggle value={order} onChange={setOrder} />
         <AddCustomModelDialog
@@ -39,15 +61,28 @@ export function ModelsPage() {
             key={model.tier}
             model={model}
             onDownload={(tier) => {
-              void bridge.downloadModel(tier)
-              toast.info('Mock download only in Phase 1')
+              void bridge
+                .downloadModel(tier)
+                .then(async () => {
+                  toast.success(`Download started: ${tier}`)
+                  await refresh()
+                })
+                .catch((error: unknown) => {
+                  toast.error(error instanceof Error ? error.message : 'Could not start model download')
+                })
             }}
             onCopyPath={(tier) => {
-              void bridge.copyModelPath(tier)
+              void bridge
+                .copyModelPath(tier)
+                .then(() => toast.success('Model path copied'))
+                .catch((error: unknown) => {
+                  toast.error(error instanceof Error ? error.message : 'Could not copy model path')
+                })
             }}
             onOpenFolder={(tier) => {
-              void bridge.openModelFolder(tier)
-              toast.info('Mock folder action')
+              void bridge.openModelFolder(tier).catch((error: unknown) => {
+                toast.error(error instanceof Error ? error.message : 'Could not open model folder')
+              })
             }}
           />
         ))}

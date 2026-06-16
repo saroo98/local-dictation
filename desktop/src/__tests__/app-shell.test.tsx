@@ -13,11 +13,16 @@ describe('app shell', () => {
     for (const name of ['Recording', 'History', 'Models', 'Settings', 'Exports', 'Help/About']) {
       expect(nav.getByRole('button', { name })).toBeInTheDocument()
     }
+    expect(screen.getByText('Stage 4')).toBeInTheDocument()
+    expect(screen.getByText(/Tauri can start and monitor the Python backend/i)).toBeInTheDocument()
 
     await user.click(nav.getByRole('button', { name: 'Models' }))
     expect(screen.getByRole('heading', { name: 'Models', level: 2 })).toBeInTheDocument()
 
     await user.click(nav.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('heading', { name: 'Settings', level: 2 })).toBeInTheDocument()
+
+    await user.click(nav.getByRole('button', { name: 'Help/About' }))
+    expect(screen.getByText(/Stage 4 can start and monitor/i)).toBeInTheDocument()
   })
 })

@@ -10,13 +10,17 @@ export function ExportsPage() {
   const bridge = useBridge()
 
   async function exportAll(format: 'txt' | 'md') {
-    await bridge.exportHistory(format)
-    toast.success(`Mock ${format.toUpperCase()} export prepared`)
+    try {
+      const path = await bridge.exportHistory(format)
+      toast.success(`Exported to ${path}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not export ${format.toUpperCase()}`)
+    }
   }
 
   return (
     <div>
-      <PageHeader title="Exports" description="Export affordances for the future desktop app. Phase 1 uses mock data only." />
+      <PageHeader title="Exports" description="Export recent local transcripts through the active bridge." />
       <div className="mb-5 flex gap-3">
         <Button type="button" onClick={() => void exportAll('txt')}>
           Export all TXT

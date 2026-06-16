@@ -13,7 +13,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 # ---------------------------------------------------------------------
 # NVIDIA CUDA DLL discovery
@@ -136,6 +136,13 @@ audio_stream = None     # sounddevice InputStream, set at startup
 tray_icon = None        # pystray.Icon, set at startup when pystray is installed
 tray_state = "ready"
 shutting_down = False
+CONTROL_MAX_COMMAND_BYTES = 65536
+BACKEND_PROTOCOL_VERSION = 4
+BACKEND_VERSION = "0.4.0-backend-manager"
+backend_owner = "not-started"
+backend_started_monotonic = time.monotonic()
+model_download_status: Dict[str, Dict[str, str]] = {}
+model_download_status_lock = threading.Lock()
 
 recording_session_counter = 0
 current_recording_session_id = 0
@@ -324,6 +331,9 @@ def parse_cli_action(argv: Sequence[str]) -> str:
     if len(argv) == 1 and argv[0] == "--resident":
         return "resident"
 
+    if len(argv) == 1 and argv[0] == "--api":
+        return "api"
+
     if len(argv) == 1 and argv[0] == "--show-history":
         return "show-history"
 
@@ -336,6 +346,9 @@ def control_command_for_existing_instance(initial_action: str) -> Optional[str]:
 
     if initial_action == "show-history":
         return "show-history"
+
+    if initial_action == "api":
+        return json.dumps({"cmd": "health", "args": {}})
 
     return None
 
@@ -518,12 +531,48 @@ def send_control_command(command: str) -> bool:
         ) as client:
             client.settimeout(config.CONTROL_TIMEOUT_SECONDS)
             client.sendall(command.encode("utf-8") + b"\n")
-            response = client.recv(64).decode("utf-8", errors="replace").strip()
+            response_chunks = bytearray()
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                response_chunks.extend(chunk)
+                if b"\n" in chunk or len(response_chunks) > CONTROL_MAX_COMMAND_BYTES:
+                    break
+            response = bytes(response_chunks).decode("utf-8", errors="replace").strip()
             log(f"Control command response: command={command} response={response}")
-            return response == "ok"
+            if response == "ok":
+                return True
+            if response.startswith("{"):
+                try:
+                    parsed = json.loads(response)
+                except json.JSONDecodeError:
+                    return False
+                return bool(isinstance(parsed, dict) and parsed.get("ok") is True)
+            return False
     except OSError as exc:
         log(f"Control command failed: command={command} error={exc}")
         return False
+
+
+def read_control_command(client, max_bytes: int = CONTROL_MAX_COMMAND_BYTES) -> str:
+    data = bytearray()
+
+    while True:
+        chunk = client.recv(4096)
+        if not chunk:
+            break
+
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise ValueError("Control command too large.")
+
+        newline_index = data.find(b"\n")
+        if newline_index != -1:
+            data = data[:newline_index]
+            break
+
+    return data.decode("utf-8", errors="replace").strip()
 
 
 def resolve_pythonw_path(current_python: Path, project_dir: Path) -> Path:
@@ -853,8 +902,374 @@ def toggle_recording_from_shortcut() -> None:
         start_recording(source="shortcut-toggle")
 
 
+def control_json_success(data) -> str:
+    return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
+
+
+def control_json_error(message: str) -> str:
+    return json.dumps({"ok": False, "error": message}, ensure_ascii=False)
+
+
+def control_state_status(
+    *,
+    is_recording: bool,
+    is_transcribing: bool,
+    is_waiting: bool,
+) -> str:
+    if is_recording:
+        return "recording"
+    if is_transcribing:
+        return "transcribing"
+    if is_waiting:
+        return "paste-ready"
+    return "idle"
+
+
+def control_settings_data() -> dict:
+    return settings.load_settings()
+
+
+def control_history_data() -> List[dict]:
+    entries = load_transcript_history_entries()
+    return [
+        {"text": entry.text, "created_at": entry.created_at}
+        for entry in reversed(entries)
+    ]
+
+
+def control_model_rank(choice: str, ordered_choices: List[str]) -> int:
+    try:
+        return ordered_choices.index(choice) + 1
+    except ValueError:
+        return len(ordered_choices) + 1
+
+
+def control_models_data(args: dict) -> List[dict]:
+    current_settings = settings.load_settings()
+    custom_models = current_settings.get("custom_models", [])
+    order = args.get("order") if isinstance(args, dict) else None
+    if order not in settings.MODEL_ORDER_CHOICES:
+        order = current_settings.get("model_order", settings.DEFAULT_SETTINGS["model_order"])
+
+    speed_choices = settings.model_choices(custom_models, order="Speed")
+    accuracy_choices = settings.model_choices(custom_models, order="Accuracy")
+    selected_choices = settings.model_choices(custom_models, order=order)
+
+    models = []
+    for choice in selected_choices:
+        details = dict(settings.model_tier_details(choice, custom_models=custom_models))
+        details["speed_rank"] = control_model_rank(choice, speed_choices)
+        details["accuracy_rank"] = control_model_rank(choice, accuracy_choices)
+        with model_download_status_lock:
+            status = dict(model_download_status.get(choice, {}))
+        if details["available"]:
+            details["download_status"] = "installed"
+            details["download_error"] = ""
+        elif status.get("status"):
+            details["download_status"] = status["status"]
+            details["download_error"] = status.get("error", "")
+        else:
+            details["download_status"] = "idle"
+            details["download_error"] = ""
+        models.append(details)
+    return models
+
+
+def control_state_data() -> dict:
+    with state_lock:
+        is_recording = recording
+        is_transcribing = transcribing
+        is_waiting = waiting_for_target_click
+        transcript = latest_transcript or ""
+
+    return {
+        "recording": is_recording,
+        "transcribing": is_transcribing,
+        "waiting_for_target_click": is_waiting,
+        "status": control_state_status(
+            is_recording=is_recording,
+            is_transcribing=is_transcribing,
+            is_waiting=is_waiting,
+        ),
+        "latestTranscript": transcript,
+        "activeModel": SETTINGS.get("model", settings.DEFAULT_SETTINGS["model"]),
+        "activeLanguage": SETTINGS.get("language", settings.DEFAULT_SETTINGS["language"]),
+    }
+
+
+def control_health_data() -> dict:
+    state = control_state_data()
+    uptime_seconds = max(time.monotonic() - backend_started_monotonic, 0.0)
+    return {
+        "version": BACKEND_VERSION,
+        "pid": os.getpid(),
+        "status": state["status"],
+        "protocol_version": BACKEND_PROTOCOL_VERSION,
+        "backend_owner": backend_owner,
+        "model": SETTINGS.get("model", settings.DEFAULT_SETTINGS["model"]),
+        "language": SETTINGS.get("language", settings.DEFAULT_SETTINGS["language"]),
+        "device": active_device,
+        "uptime_seconds": uptime_seconds,
+    }
+
+
+def control_shutdown_backend() -> dict:
+    if root is None:
+        raise ValueError("Tk root is not ready.")
+
+    root.after(0, quit_app)
+    return {"accepted": True}
+
+
+def control_set_settings(args: dict) -> dict:
+    global SETTINGS
+
+    requested = args.get("settings") if isinstance(args, dict) else None
+    if not isinstance(requested, dict):
+        raise ValueError("Settings payload is required.")
+
+    previous_settings = dict(SETTINGS)
+    previous_model = previous_settings.get("model", settings.DEFAULT_SETTINGS["model"])
+    merged = settings.merge_settings(settings.DEFAULT_SETTINGS, requested)
+    cleaned = settings.validate_settings(merged)
+    requested_model = cleaned.get("model", previous_model)
+
+    if (
+        config.LOCAL_FILES_ONLY
+        and requested_model != previous_model
+        and not settings.model_is_available_locally(
+            requested_model,
+            custom_models=cleaned.get("custom_models"),
+        )
+    ):
+        raise ValueError(f"Model is not installed locally: {requested_model}")
+
+    SETTINGS = cleaned
+    settings.save_settings(SETTINGS)
+    log("Settings saved from local bridge.")
+
+    restart_hotkey_listener(SETTINGS["hotkey"])
+    redraw_bubble_current_state()
+    refresh_settings_panel()
+
+    if SETTINGS["model"] != previous_model:
+        threading.Thread(
+            target=reload_model_for_settings,
+            args=(previous_model,),
+            daemon=True,
+        ).start()
+
+    return dict(SETTINGS)
+
+
+def control_schedule_recording_action(command: str) -> dict:
+    if root is None:
+        raise ValueError("Tk root is not ready.")
+
+    with state_lock:
+        is_recording = recording
+        is_transcribing = transcribing
+
+    if command == "start-recording":
+        if is_transcribing:
+            raise ValueError("Cannot start recording while transcribing.")
+        if is_recording:
+            raise ValueError("Already recording.")
+        root.after(0, lambda: start_recording(source="tauri-bridge"))
+    elif command == "stop-recording":
+        if not is_recording:
+            raise ValueError("Not recording.")
+        root.after(0, lambda: stop_recording(reason="tauri-bridge"))
+    elif command == "toggle-recording":
+        if is_transcribing:
+            raise ValueError("Cannot toggle recording while transcribing.")
+        root.after(0, toggle_recording_from_shortcut)
+    else:
+        raise ValueError(f"Unknown recording command: {command}")
+
+    return {"accepted": True, "state": control_state_data()}
+
+
+def control_clear_history() -> List[dict]:
+    history_path = config.TRANSCRIPT_HISTORY_FILE
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    history_path.write_text("[]", encoding="utf-8")
+    log("Transcript history cleared from local bridge.")
+    return []
+
+
+def control_export_history(args: dict) -> str:
+    raw_format = args.get("format") if isinstance(args, dict) else None
+    if raw_format not in {"txt", "md"}:
+        raise ValueError("Export format must be txt or md.")
+
+    entries = list(reversed(load_transcript_history_entries()))
+    if not entries:
+        raise ValueError("No history to export.")
+
+    text_format = "Markdown (.md)" if raw_format == "md" else "Plain Text"
+    content = settings.format_history_export(entries, text_format)
+    if not content:
+        raise ValueError("No history to export.")
+
+    export_dir = default_export_dir()
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = export_dir / f"dictation_export_{stamp}{settings.export_extension(text_format)}"
+    export_dir.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
+    log(f"Exported {len(entries)} transcripts from local bridge -> {out_path}")
+    return str(out_path)
+
+
+def set_model_download_status(choice: str, status: str, error: str = "") -> None:
+    with model_download_status_lock:
+        model_download_status[choice] = {"status": status, "error": error}
+
+
+def control_download_model(args: dict) -> dict:
+    choice = str(args.get("choice", "")).strip() if isinstance(args, dict) else ""
+    if choice not in settings.model_choices(SETTINGS.get("custom_models")):
+        raise ValueError("Unknown model choice.")
+
+    set_model_download_status(choice, "downloading")
+
+    def worker() -> None:
+        try:
+            download_model_for_choice(
+                choice,
+                custom_models=SETTINGS.get("custom_models"),
+            )
+        except Exception as exc:
+            log_exception("Model download failed from local bridge", exc)
+            set_model_download_status(choice, "error", str(exc))
+            return
+
+        log(f"Model downloaded from local bridge: {choice}")
+        set_model_download_status(choice, "idle")
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"choice": choice, "status": "downloading"}
+
+
+def model_path_for_choice(choice: str) -> str:
+    details = settings.model_tier_details(
+        choice,
+        custom_models=SETTINGS.get("custom_models"),
+    )
+    cache_dir = Path(str(details["cache_dir"]))
+    if details["source_type"] == "local":
+        return str(cache_dir)
+    if details["available"] or cache_dir.exists():
+        return str(cache_dir)
+    return str(settings.huggingface_cache_root())
+
+
+def control_open_model_folder(args: dict) -> str:
+    choice = str(args.get("choice", "")).strip() if isinstance(args, dict) else ""
+    if choice not in settings.model_choices(SETTINGS.get("custom_models")):
+        raise ValueError("Unknown model choice.")
+
+    path = Path(model_path_for_choice(choice))
+    path.mkdir(parents=True, exist_ok=True)
+    os.startfile(str(path))
+    log(f"Model folder opened from local bridge: {path}")
+    return str(path)
+
+
+def control_copy_model_path(args: dict) -> str:
+    choice = str(args.get("choice", "")).strip() if isinstance(args, dict) else ""
+    if choice not in settings.model_choices(SETTINGS.get("custom_models")):
+        raise ValueError("Unknown model choice.")
+
+    path = model_path_for_choice(choice)
+    pyperclip.copy(path)
+    log("Model path copied from local bridge.")
+    return path
+
+
+def control_add_custom_model(args: dict) -> dict:
+    global SETTINGS
+
+    name = str(args.get("name", "")).strip() if isinstance(args, dict) else ""
+    source = str(args.get("source", "")).strip() if isinstance(args, dict) else ""
+    if not name or not source:
+        raise ValueError("Custom model name and source are required.")
+
+    current_custom = list(SETTINGS.get("custom_models", []))
+    normalized = settings.normalize_custom_models(
+        current_custom + [{"name": name, "source": source}]
+    )
+    if len(normalized) == len(current_custom):
+        raise ValueError("Use a unique name and a valid Hugging Face repo ID or faster-whisper model folder.")
+
+    SETTINGS = dict(SETTINGS)
+    SETTINGS["custom_models"] = normalized
+    SETTINGS = settings.validate_settings(settings.merge_settings(settings.DEFAULT_SETTINGS, SETTINGS))
+    settings.save_settings(SETTINGS)
+    refresh_settings_panel()
+    log(f"Custom model added from local bridge: {name}")
+    return dict(SETTINGS)
+
+
+def handle_json_control_command(command: str) -> str:
+    try:
+        request = json.loads(command)
+    except json.JSONDecodeError:
+        return control_json_error("Invalid JSON request.")
+
+    if not isinstance(request, dict):
+        return control_json_error("JSON request must be an object.")
+
+    cmd = request.get("cmd")
+    args = request.get("args", {})
+    if args is None:
+        args = {}
+    if not isinstance(args, dict):
+        return control_json_error("Request args must be an object.")
+
+    try:
+        if cmd == "health":
+            return control_json_success(control_health_data())
+        if cmd == "backend-owner":
+            return control_json_success(backend_owner)
+        if cmd == "shutdown-backend":
+            return control_json_success(control_shutdown_backend())
+        if cmd == "get-settings":
+            return control_json_success(control_settings_data())
+        if cmd == "get-history":
+            return control_json_success(control_history_data())
+        if cmd == "list-models":
+            return control_json_success(control_models_data(args))
+        if cmd == "get-state":
+            return control_json_success(control_state_data())
+        if cmd == "set-settings":
+            return control_json_success(control_set_settings(args))
+        if cmd in {"start-recording", "stop-recording", "toggle-recording"}:
+            return control_json_success(control_schedule_recording_action(cmd))
+        if cmd == "clear-history":
+            return control_json_success(control_clear_history())
+        if cmd == "export-history":
+            return control_json_success(control_export_history(args))
+        if cmd == "download-model":
+            return control_json_success(control_download_model(args))
+        if cmd == "open-model-folder":
+            return control_json_success(control_open_model_folder(args))
+        if cmd == "copy-model-path":
+            return control_json_success(control_copy_model_path(args))
+        if cmd == "add-custom-model":
+            return control_json_success(control_add_custom_model(args))
+    except Exception as exc:
+        log_exception(f"JSON control command failed: {cmd}", exc)
+        return control_json_error(str(exc))
+
+    return control_json_error(f"Unknown command: {cmd}")
+
+
 def handle_control_command(command: str) -> str:
     log(f"Control command received: {command}")
+
+    if command.lstrip().startswith("{"):
+        return handle_json_control_command(command)
 
     if command not in {"toggle-record", "show-history"}:
         log(f"Control command rejected: {command}")
@@ -888,8 +1303,11 @@ def control_server_loop(stop_event: threading.Event) -> None:
                     continue
 
                 with client:
-                    data = client.recv(1024).decode("utf-8", errors="replace").strip()
-                    response = handle_control_command(data)
+                    try:
+                        data = read_control_command(client)
+                        response = handle_control_command(data)
+                    except ValueError as exc:
+                        response = control_json_error(str(exc))
                     client.sendall(response.encode("utf-8") + b"\n")
     except Exception as exc:
         log_exception("Control server failed", exc)
@@ -4175,10 +4593,13 @@ def show_startup_error(message: str) -> None:
 
 def main(initial_action: str = "run-app") -> None:
     global root, bubble, model, control_stop_event, hotkey_listener, mouse_listener, audio_stream
+    global backend_owner, backend_started_monotonic
 
     if session_log_file is None:
         initialize_logging()
 
+    backend_owner = initial_action
+    backend_started_monotonic = time.monotonic()
     log_app_environment(initial_action)
 
     if not acquire_single_instance_lock():
@@ -4235,7 +4656,7 @@ def main(initial_action: str = "run-app") -> None:
     control_stop_event = start_control_server()
     release_launch_lock()
 
-    if initial_action == "resident":
+    if initial_action in {"resident", "api"}:
         hide_bubble_window()
     elif initial_action == "show-history":
         hide_bubble_window()

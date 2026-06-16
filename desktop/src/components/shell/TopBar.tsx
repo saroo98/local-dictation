@@ -1,5 +1,8 @@
 import { Moon, Sun, Monitor, Palette } from 'lucide-react'
 
+import { getBridgeRuntimeLabel } from '@/bridge'
+import { useBackendStatus } from '@/bridge/useBackendStatus'
+import { BackendStatusBadge } from '@/components/backend/BackendStatusBadge'
 import { StatusPill } from '@/components/shell/StatusPill'
 import { SimpleSelect } from '@/components/ui/simple-select'
 import { themeModes, themePresets } from '@/theme/theme-presets'
@@ -7,6 +10,7 @@ import { useTheme } from '@/theme/use-theme'
 
 export function TopBar({ title }: { title: string }) {
   const { mode, preset, setMode, setPreset } = useTheme()
+  const { backendStatus } = useBackendStatus()
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/70 bg-background/88 px-6 backdrop-blur">
@@ -16,7 +20,8 @@ export function TopBar({ title }: { title: string }) {
       </div>
       <div className="flex items-center gap-3">
         <StatusPill />
-        <BadgeLike>Mock UI</BadgeLike>
+        <BadgeLike>{getBridgeRuntimeLabel()}</BadgeLike>
+        <BackendStatusBadge status={backendStatus} />
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           {mode === 'dark' ? <Moon className="h-3.5 w-3.5" /> : mode === 'light' ? <Sun className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
           <SimpleSelect
