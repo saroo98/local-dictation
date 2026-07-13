@@ -16,6 +16,7 @@ const settingsResponse: Settings = {
   language: 'English (US)',
   model: 'Balanced',
   model_order: 'Speed',
+  device_mode: 'auto',
   theme: 'Dark Mode',
   opacity: 96,
   text_format: 'Plain Text',

@@ -11,6 +11,7 @@ describe('mock bridge', () => {
       language: 'English (US)',
       model: 'Balanced',
       model_order: 'Speed',
+      device_mode: 'auto',
       theme: 'Dark Mode',
       opacity: 100,
       text_format: 'Plain Text',
