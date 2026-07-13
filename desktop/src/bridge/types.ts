@@ -4,11 +4,13 @@ export type ThemePreset = 'neutral' | 'green' | 'blue'
 export type AppStatus = 'idle' | 'recording' | 'transcribing' | 'paste-ready' | 'error'
 export type DownloadStatus = 'idle' | 'downloading' | 'installed' | 'error'
 export type BackendStatusKind = 'not_running' | 'starting' | 'ready' | 'unhealthy' | 'stopping' | 'error'
+export type DeviceMode = 'auto' | 'cuda' | 'cpu'
 
 export interface Settings {
   language: string
   model: string
   model_order: ModelOrder
+  device_mode: DeviceMode
   theme: string
   opacity: number
   text_format: string
@@ -80,6 +82,9 @@ export interface BackendStatus {
   message: string
   log_path: string
   health?: BackendHealth
+  launch_kind?: 'sidecar' | 'python-fallback' | 'existing' | 'managed' | string
+  starting_seconds?: number
+  last_error?: string
 }
 
 export type BackendStartResult = BackendStatus

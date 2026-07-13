@@ -12,12 +12,45 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Local Dictation",
         "width": 1100,
         "height": 720,
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true
+      },
+      {
+        "label": "bubble",
+        "url": "index.html?surface=bubble",
+        "title": "Local Dictation Bubble",
+        "width": 56,
+        "height": 56,
+        "minWidth": 56,
+        "minHeight": 56,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false
+      },
+      {
+        "label": "quick-popover",
+        "url": "index.html?surface=quick-popover",
+        "title": "Local Dictation Quick History",
+        "width": 410,
+        "height": 300,
+        "minWidth": 410,
+        "minHeight": 300,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false
       }
     ],
     "security": {

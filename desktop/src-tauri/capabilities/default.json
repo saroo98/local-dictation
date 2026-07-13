@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop window capability set for Phase 1 mock UI.",
-  "windows": ["main"],
-  "permissions": []
+  "windows": ["main", "bubble", "quick-popover"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
 }
