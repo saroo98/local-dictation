@@ -14,6 +14,7 @@ DEFAULT_MODEL_CHOICES = ["Fast", "Balanced", "High Accuracy"]
 OPTIONAL_MODEL_CHOICES = ["Ultra Fast English", "Compact Multilingual", "Medium Quality"]
 MODEL_CHOICES = DEFAULT_MODEL_CHOICES + OPTIONAL_MODEL_CHOICES
 MODEL_ORDER_CHOICES = ["Speed", "Accuracy"]
+DEVICE_MODE_CHOICES = ["auto", "cuda", "cpu"]
 THEME_CHOICES = ["Dark Mode", "Light Mode", "System"]
 FORMAT_CHOICES = ["Plain Text", "Markdown (.md)"]
 MODEL_REPO_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -88,6 +89,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "language": "English (US)",
     "model": "Balanced",
     "model_order": "Speed",
+    "device_mode": "auto",
     "theme": "Dark Mode",
     "opacity": 96,
     "text_format": "Plain Text",
@@ -141,6 +143,8 @@ def validate_settings(values: Dict[str, Any]) -> Dict[str, Any]:
         result["language"] = DEFAULT_SETTINGS["language"]
     if result.get("model_order") not in MODEL_ORDER_CHOICES:
         result["model_order"] = DEFAULT_SETTINGS["model_order"]
+    if result.get("device_mode") not in DEVICE_MODE_CHOICES:
+        result["device_mode"] = DEFAULT_SETTINGS["device_mode"]
     if result.get("model") not in model_choices(result["custom_models"], order=result["model_order"]):
         result["model"] = DEFAULT_SETTINGS["model"]
     if result.get("theme") not in THEME_CHOICES:

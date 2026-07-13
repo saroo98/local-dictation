@@ -16,19 +16,25 @@ export function ModelCard({ model, onDownload, onCopyPath, onOpenFolder }: Model
   const downloading = model.download_status === 'downloading'
   const downloadFailed = model.download_status === 'error'
   const downloadLabel = model.available ? 'Installed' : downloading ? 'Downloading...' : 'Download'
+  const statusLabel = model.available ? 'Installed' : downloading ? 'Downloading' : downloadFailed ? 'Error' : 'Not installed'
+  const statusClass = model.available
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 shadow-none'
+    : downloadFailed
+      ? 'border-destructive/30 bg-destructive/10 text-destructive shadow-none'
+      : 'border-border bg-secondary text-secondary-foreground shadow-none'
 
   return (
     <Card data-testid="model-card" className="flex flex-col">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>{model.tier}</CardTitle>
+            <CardTitle>{model.tier} ({model.size_text})</CardTitle>
             <CardDescription>
-              {model.model_name} | {model.size_text}
+              {model.model_name}
             </CardDescription>
           </div>
-          <Badge className={model.available ? 'border-primary/40 text-primary' : undefined}>
-            {model.available ? 'Installed' : downloading ? 'Downloading' : downloadFailed ? 'Error' : 'Not installed'}
+          <Badge variant="outline" className={statusClass}>
+            {statusLabel}
           </Badge>
         </div>
       </CardHeader>

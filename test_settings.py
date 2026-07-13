@@ -22,6 +22,12 @@ class MergeAndValidateTests(unittest.TestCase):
         merged = settings.merge_settings(settings.DEFAULT_SETTINGS, {"model": "Nope"})
         self.assertEqual(merged["model"], settings.DEFAULT_SETTINGS["model"])
 
+    def test_device_mode_defaults_and_validation(self):
+        self.assertEqual(settings.merge_settings(settings.DEFAULT_SETTINGS, {})["device_mode"], "auto")
+        self.assertEqual(settings.validate_settings({"device_mode": "cuda"})["device_mode"], "cuda")
+        self.assertEqual(settings.validate_settings({"device_mode": "cpu"})["device_mode"], "cpu")
+        self.assertEqual(settings.validate_settings({"device_mode": "vulkan"})["device_mode"], "auto")
+
     def test_opacity_is_clamped(self):
         self.assertEqual(settings.validate_settings({"opacity": 5})["opacity"], settings.config.OPACITY_MIN)
         self.assertEqual(settings.validate_settings({"opacity": 500})["opacity"], settings.config.OPACITY_MAX)
