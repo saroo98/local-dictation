@@ -20,10 +20,19 @@ export function RecordingPage() {
   const [state, setState] = useState<AppState | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const backendReady = backendStatus?.status === 'ready'
-  const recordingDisabled = backendStatus !== null && !backendReady
+  const isBrowserMockBackend = backendStatus?.health?.backend_owner === 'browser-mock'
+  const isLocalBridge = runtimeLabel === 'Local bridge' || (backendStatus !== null && !isBrowserMockBackend)
+  const canReadRuntimeState = !isLocalBridge || backendReady
+  const showBackendAlert = isLocalBridge && backendStatus !== null && !backendReady
+  const recordingDisabled = isLocalBridge && !backendReady
 
   useEffect(() => {
     let mounted = true
+    if (!canReadRuntimeState) {
+      return () => {
+        mounted = false
+      }
+    }
     void bridge
       .getState()
       .then((next) => {
@@ -48,7 +57,7 @@ export function RecordingPage() {
       mounted = false
       off()
     }
-  }, [bridge])
+  }, [bridge, canReadRuntimeState])
 
   async function toggleRecording() {
     try {
@@ -59,6 +68,22 @@ export function RecordingPage() {
       toast.error(error instanceof Error ? error.message : 'Could not toggle recording')
     }
   }
+
+  const backendAlertTitle =
+    backendStatus?.status === 'starting'
+      ? 'Backend starting'
+      : backendStatus?.status === 'stopping'
+        ? 'Backend stopping'
+        : backendStatus?.status === 'error' || backendStatus?.status === 'unhealthy'
+          ? 'Backend error'
+          : 'Backend not running'
+
+  const backendAlertDescription =
+    backendStatus?.status === 'starting'
+      ? `${backendStatus.message} You can keep using the rest of the app while it loads.`
+      : `${backendStatus?.message ?? 'Backend not running.'} Check Help/About or the top bar to start the local Python backend.`
+  const displayState = canReadRuntimeState ? state : null
+  const displayHistory = canReadRuntimeState ? history : []
 
   return (
     <div>
@@ -74,16 +99,14 @@ export function RecordingPage() {
         <div className="space-y-5">
           <Card className="ld-card-shadow">
             <CardContent className="flex flex-col items-center gap-5 p-8 text-center">
-              {recordingDisabled ? (
+              {showBackendAlert ? (
                 <Alert>
-                  <AlertTitle>Backend not running</AlertTitle>
-                  <AlertDescription>
-                    {backendStatus.message} Check Help/About or the top bar to start the local Python backend.
-                  </AlertDescription>
+                  <AlertTitle>{backendAlertTitle}</AlertTitle>
+                  <AlertDescription>{backendAlertDescription}</AlertDescription>
                 </Alert>
               ) : null}
               <RecordButton
-                state={state}
+                state={displayState}
                 onToggle={() => void toggleRecording()}
                 disabled={recordingDisabled}
               />
@@ -97,12 +120,12 @@ export function RecordingPage() {
               </div>
             </CardContent>
           </Card>
-          <RecordingStatusCard state={state} />
-          <TranscriptPreview text={state?.latestTranscript ?? ''} onOpenHistory={() => undefined} />
+          <RecordingStatusCard state={displayState} />
+          <TranscriptPreview text={displayState?.latestTranscript ?? ''} onOpenHistory={() => undefined} />
         </div>
         <div>
           <p className="mb-3 text-sm font-medium text-muted-foreground">Floating bubble and transcript popover preview</p>
-          <BubblePreview entries={history} />
+          <BubblePreview entries={displayHistory} />
         </div>
       </div>
     </div>

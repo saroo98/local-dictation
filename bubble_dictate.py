@@ -56,6 +56,7 @@ add_nvidia_dll_dirs()
 
 
 import config
+from control_bridge import ControlCommandRouter
 import icons
 import settings
 import numpy as np
@@ -351,6 +352,18 @@ def control_command_for_existing_instance(initial_action: str) -> Optional[str]:
         return json.dumps({"cmd": "health", "args": {}})
 
     return None
+
+
+def visual_shell_enabled(initial_action: str) -> bool:
+    return initial_action != "api"
+
+
+def python_tray_enabled(initial_action: str) -> bool:
+    return visual_shell_enabled(initial_action)
+
+
+def startup_error_dialog_enabled(initial_action: str) -> bool:
+    return visual_shell_enabled(initial_action)
 
 
 def quote_argument(path: Path) -> str:
@@ -902,14 +915,6 @@ def toggle_recording_from_shortcut() -> None:
         start_recording(source="shortcut-toggle")
 
 
-def control_json_success(data) -> str:
-    return json.dumps({"ok": True, "data": data}, ensure_ascii=False)
-
-
-def control_json_error(message: str) -> str:
-    return json.dumps({"ok": False, "error": message}, ensure_ascii=False)
-
-
 def control_state_status(
     *,
     is_recording: bool,
@@ -958,6 +963,7 @@ def control_models_data(args: dict) -> List[dict]:
     models = []
     for choice in selected_choices:
         details = dict(settings.model_tier_details(choice, custom_models=custom_models))
+        details["size_text"] = settings.model_display_size_text(choice, custom_models=custom_models)
         details["speed_rank"] = control_model_rank(choice, speed_choices)
         details["accuracy_rank"] = control_model_rank(choice, accuracy_choices)
         with model_download_status_lock:
@@ -1030,6 +1036,7 @@ def control_set_settings(args: dict) -> dict:
 
     previous_settings = dict(SETTINGS)
     previous_model = previous_settings.get("model", settings.DEFAULT_SETTINGS["model"])
+    previous_device_mode = previous_settings.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"])
     merged = settings.merge_settings(settings.DEFAULT_SETTINGS, requested)
     cleaned = settings.validate_settings(merged)
     requested_model = cleaned.get("model", previous_model)
@@ -1052,7 +1059,10 @@ def control_set_settings(args: dict) -> dict:
     redraw_bubble_current_state()
     refresh_settings_panel()
 
-    if SETTINGS["model"] != previous_model:
+    if (
+        SETTINGS["model"] != previous_model
+        or SETTINGS.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"]) != previous_device_mode
+    ):
         threading.Thread(
             target=reload_model_for_settings,
             args=(previous_model,),
@@ -1211,80 +1221,85 @@ def control_add_custom_model(args: dict) -> dict:
     return dict(SETTINGS)
 
 
-def handle_json_control_command(command: str) -> str:
-    try:
-        request = json.loads(command)
-    except json.JSONDecodeError:
-        return control_json_error("Invalid JSON request.")
+class BubbleControlActions:
+    def health(self):
+        return control_health_data()
 
-    if not isinstance(request, dict):
-        return control_json_error("JSON request must be an object.")
+    def backend_owner(self):
+        return backend_owner
 
-    cmd = request.get("cmd")
-    args = request.get("args", {})
-    if args is None:
-        args = {}
-    if not isinstance(args, dict):
-        return control_json_error("Request args must be an object.")
+    def shutdown_backend(self):
+        return control_shutdown_backend()
 
-    try:
-        if cmd == "health":
-            return control_json_success(control_health_data())
-        if cmd == "backend-owner":
-            return control_json_success(backend_owner)
-        if cmd == "shutdown-backend":
-            return control_json_success(control_shutdown_backend())
-        if cmd == "get-settings":
-            return control_json_success(control_settings_data())
-        if cmd == "get-history":
-            return control_json_success(control_history_data())
-        if cmd == "list-models":
-            return control_json_success(control_models_data(args))
-        if cmd == "get-state":
-            return control_json_success(control_state_data())
-        if cmd == "set-settings":
-            return control_json_success(control_set_settings(args))
-        if cmd in {"start-recording", "stop-recording", "toggle-recording"}:
-            return control_json_success(control_schedule_recording_action(cmd))
-        if cmd == "clear-history":
-            return control_json_success(control_clear_history())
-        if cmd == "export-history":
-            return control_json_success(control_export_history(args))
-        if cmd == "download-model":
-            return control_json_success(control_download_model(args))
-        if cmd == "open-model-folder":
-            return control_json_success(control_open_model_folder(args))
-        if cmd == "copy-model-path":
-            return control_json_success(control_copy_model_path(args))
-        if cmd == "add-custom-model":
-            return control_json_success(control_add_custom_model(args))
-    except Exception as exc:
-        log_exception(f"JSON control command failed: {cmd}", exc)
-        return control_json_error(str(exc))
+    def get_settings(self):
+        return control_settings_data()
 
-    return control_json_error(f"Unknown command: {cmd}")
+    def get_history(self):
+        return control_history_data()
+
+    def list_models(self, args: dict):
+        return control_models_data(args)
+
+    def get_state(self):
+        return control_state_data()
+
+    def set_settings(self, args: dict):
+        return control_set_settings(args)
+
+    def recording_action(self, command: str):
+        return control_schedule_recording_action(command)
+
+    def clear_history(self):
+        return control_clear_history()
+
+    def export_history(self, args: dict):
+        return control_export_history(args)
+
+    def download_model(self, args: dict):
+        return control_download_model(args)
+
+    def open_model_folder(self, args: dict):
+        return control_open_model_folder(args)
+
+    def copy_model_path(self, args: dict):
+        return control_copy_model_path(args)
+
+    def add_custom_model(self, args: dict):
+        return control_add_custom_model(args)
+
+    def legacy_action(self, command: str) -> bool:
+        if root is None:
+            log(f"Control command rejected because root is not ready: {command}")
+            return False
+
+        if command == "toggle-record":
+            root.after(0, toggle_recording_from_shortcut)
+            return True
+        if command == "show-history":
+            root.after(0, show_history_panel)
+            return True
+        return False
+
+
+def control_exception_logger(command: str, exc: BaseException) -> None:
+    log_exception(f"JSON control command failed: {command}", exc)
 
 
 def handle_control_command(command: str) -> str:
     log(f"Control command received: {command}")
 
-    if command.lstrip().startswith("{"):
-        return handle_json_control_command(command)
-
-    if command not in {"toggle-record", "show-history"}:
+    if (
+        not command.lstrip().startswith(("{", "["))
+        and command not in {"toggle-record", "show-history"}
+    ):
         log(f"Control command rejected: {command}")
         return "error"
 
-    if root is None:
-        log(f"Control command rejected because root is not ready: {command}")
-        return "error"
-
-    if command == "toggle-record":
-        root.after(0, toggle_recording_from_shortcut)
-    else:
-        root.after(0, show_history_panel)
-
-    return "ok"
+    router = ControlCommandRouter(
+        BubbleControlActions(),
+        exception_logger=control_exception_logger,
+    )
+    return router.handle(command)
 
 
 def control_server_loop(stop_event: threading.Event) -> None:
@@ -1307,7 +1322,10 @@ def control_server_loop(stop_event: threading.Event) -> None:
                         data = read_control_command(client)
                         response = handle_control_command(data)
                     except ValueError as exc:
-                        response = control_json_error(str(exc))
+                        response = json.dumps(
+                            {"ok": False, "error": str(exc)},
+                            ensure_ascii=False,
+                        )
                     client.sendall(response.encode("utf-8") + b"\n")
     except Exception as exc:
         log_exception("Control server failed", exc)
@@ -1510,6 +1528,13 @@ def current_alpha() -> float:
     return SETTINGS["opacity"] / 100.0
 
 
+def effective_device_mode() -> str:
+    device_mode = SETTINGS.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"])
+    if device_mode in settings.DEVICE_MODE_CHOICES:
+        return device_mode
+    return "auto" if config.PREFER_CUDA else "cpu"
+
+
 # ---------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------
@@ -1565,9 +1590,10 @@ def warm_up_model(loaded_model: WhisperModel) -> None:
 def load_model() -> WhisperModel:
     global active_device
 
-    log(f"Loading model: {effective_model_name()}")
+    device_mode = effective_device_mode()
+    log(f"Loading model: {effective_model_name()} on device mode {device_mode}")
 
-    if config.PREFER_CUDA:
+    if device_mode in {"auto", "cuda"}:
         try:
             log(f"Trying CUDA {config.CUDA_COMPUTE_TYPE}...")
             loaded_model = make_cuda_model()
@@ -1576,6 +1602,10 @@ def load_model() -> WhisperModel:
             log("Model loaded and warmed up on CUDA.")
             return loaded_model
         except Exception as exc:
+            if device_mode == "cuda":
+                active_device = "error"
+                log_exception("CUDA model load failed and CPU fallback is disabled", exc)
+                raise
             log_exception("CUDA failed; falling back to CPU", exc)
 
     log(f"Using CPU {config.CPU_COMPUTE_TYPE}.")
@@ -2615,8 +2645,10 @@ def quick_history_layout(
     panel_bottom = height - pointer
     footer_y = panel_bottom - 35
     pointer_tip_x = width - 22
-    pointer_base_left = pointer_tip_x - 7
-    pointer_base_right = min(pointer_tip_x + 7, width - panel_pad)
+    tail_half_width = 6
+    tail_curve_radius = 3
+    pointer_base_left = pointer_tip_x - tail_half_width
+    pointer_base_right = min(pointer_tip_x + tail_half_width, width - panel_pad)
     copy_x = width - 56
     text_x = 28
     first_divider = int(width * 0.275)
@@ -2672,6 +2704,8 @@ def quick_history_layout(
         "pointer_base_right": pointer_base_right,
         "pointer_smooth": True,
         "tail_renderer": "pillow",
+        "tail_shape": "soft-rounded",
+        "tail_curve_radius": tail_curve_radius,
     }
 
 
@@ -2717,11 +2751,14 @@ def render_quick_popover_background(
         width=sx(1),
     )
 
+    tail_curve_radius = int(layout.get("tail_curve_radius", 3))
     tail_points = [
         (sx(layout["pointer_base_left"]), sx(layout["panel_bottom"] - 1)),
-        (sx(layout["pointer_base_left"] + 4), sx(layout["panel_bottom"] + 1)),
+        (sx(layout["pointer_base_left"] + tail_curve_radius), sx(layout["panel_bottom"] + 1)),
+        (sx(layout["pointer_tip_x"] - 1), sx(layout["pointer_tip_y"] - 1)),
         (sx(layout["pointer_tip_x"]), sx(layout["pointer_tip_y"])),
-        (sx(layout["pointer_base_right"] - 4), sx(layout["panel_bottom"] + 1)),
+        (sx(layout["pointer_tip_x"] + 1), sx(layout["pointer_tip_y"] - 1)),
+        (sx(layout["pointer_base_right"] - tail_curve_radius), sx(layout["panel_bottom"] + 1)),
         (sx(layout["pointer_base_right"]), sx(layout["panel_bottom"] - 1)),
     ]
     draw.polygon(tail_points, fill=palette["panel_bg"])
@@ -3702,9 +3739,11 @@ def apply_settings_from_form(vars_) -> None:
     global SETTINGS
 
     previous_model = SETTINGS["model"]
+    previous_device_mode = SETTINGS.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"])
     new_values = {key: var.get() for key, var in vars_.items()}
     new_values["bubble_position"] = SETTINGS.get("bubble_position")
     new_values["custom_models"] = SETTINGS.get("custom_models", [])
+    new_values["device_mode"] = SETTINGS.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"])
 
     requested_model = new_values.get("model", previous_model)
     if (
@@ -3736,7 +3775,10 @@ def apply_settings_from_form(vars_) -> None:
     restart_hotkey_listener(SETTINGS["hotkey"])
     redraw_bubble_current_state()
 
-    if SETTINGS["model"] != previous_model:
+    if (
+        SETTINGS["model"] != previous_model
+        or SETTINGS.get("device_mode", settings.DEFAULT_SETTINGS["device_mode"]) != previous_device_mode
+    ):
         threading.Thread(target=reload_model_for_settings,
                          args=(previous_model,), daemon=True).start()
 
@@ -4575,6 +4617,32 @@ def create_bubble_window() -> tk.Tk:
     return app
 
 
+def configure_hidden_event_root(app):
+    app.withdraw()
+    for action in (
+        lambda: app.title(""),
+        lambda: app.geometry("1x1+-32000+-32000"),
+        lambda: app.overrideredirect(True),
+        lambda: app.attributes("-alpha", 0.0),
+        lambda: app.attributes("-toolwindow", True),
+    ):
+        try:
+            action()
+        except Exception:
+            pass
+    app.protocol("WM_DELETE_WINDOW", quit_app)
+    for delay in (0, 50, 250):
+        try:
+            app.after(delay, app.withdraw)
+        except Exception:
+            pass
+    return app
+
+
+def create_hidden_event_root() -> tk.Tk:
+    return configure_hidden_event_root(tk.Tk())
+
+
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
@@ -4616,11 +4684,12 @@ def main(initial_action: str = "run-app") -> None:
         model = load_model()
     except Exception as exc:
         log_exception("Model load failed at startup", exc)
-        show_startup_error(
-            "Could not load the speech model.\n"
-            "Check that the selected model is downloaded and CUDA/CPU deps are installed.\n"
-            "See dictation_debug.log for details."
-        )
+        if startup_error_dialog_enabled(initial_action):
+            show_startup_error(
+                "Could not load the speech model.\n"
+                "Check that the selected model is downloaded and CUDA/CPU deps are installed.\n"
+                "See dictation_debug.log for details."
+            )
         release_launch_lock()
         release_single_instance_lock()
         return
@@ -4637,11 +4706,12 @@ def main(initial_action: str = "run-app") -> None:
         audio_stream.start()
     except Exception as exc:
         log_exception("Microphone stream failed at startup", exc)
-        show_startup_error(
-            "Could not open the microphone.\n"
-            "Check that a recording device is connected and not in use.\n"
-            "See dictation_debug.log for details."
-        )
+        if startup_error_dialog_enabled(initial_action):
+            show_startup_error(
+                "Could not open the microphone.\n"
+                "Check that a recording device is connected and not in use.\n"
+                "See dictation_debug.log for details."
+            )
         release_launch_lock()
         release_single_instance_lock()
         return
@@ -4651,12 +4721,18 @@ def main(initial_action: str = "run-app") -> None:
 
     hotkey_listener = start_hotkey_listener(SETTINGS["hotkey"])
 
-    root = create_bubble_window()
-    start_tray_icon()
+    if visual_shell_enabled(initial_action):
+        root = create_bubble_window()
+    else:
+        root = create_hidden_event_root()
+
+    if python_tray_enabled(initial_action):
+        start_tray_icon()
+
     control_stop_event = start_control_server()
     release_launch_lock()
 
-    if initial_action in {"resident", "api"}:
+    if initial_action == "resident":
         hide_bubble_window()
     elif initial_action == "show-history":
         hide_bubble_window()

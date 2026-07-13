@@ -170,6 +170,57 @@ class CliControlTests(unittest.TestCase):
         self.assertIsNotNone(command)
         self.assertEqual(json.loads(command), {"cmd": "health", "args": {}})
 
+    def test_api_mode_disables_python_visual_shell(self) -> None:
+        self.assertFalse(bubble_dictate.visual_shell_enabled("api"))
+        self.assertFalse(bubble_dictate.python_tray_enabled("api"))
+        self.assertFalse(bubble_dictate.startup_error_dialog_enabled("api"))
+
+    def test_standalone_modes_keep_python_visual_shell(self) -> None:
+        for action in ["run-app", "resident", "start-recording", "show-history"]:
+            with self.subTest(action=action):
+                self.assertTrue(bubble_dictate.visual_shell_enabled(action))
+                self.assertTrue(bubble_dictate.python_tray_enabled(action))
+                self.assertTrue(bubble_dictate.startup_error_dialog_enabled(action))
+
+    def test_hidden_api_root_is_kept_offscreen_and_invisible(self) -> None:
+        class FakeRoot:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+            def withdraw(self) -> None:
+                self.calls.append(("withdraw", ()))
+
+            def title(self, value: str) -> None:
+                self.calls.append(("title", (value,)))
+
+            def protocol(self, name: str, callback: object) -> None:
+                self.calls.append(("protocol", (name, callback)))
+
+            def geometry(self, value: str) -> None:
+                self.calls.append(("geometry", (value,)))
+
+            def overrideredirect(self, value: bool) -> None:
+                self.calls.append(("overrideredirect", (value,)))
+
+            def attributes(self, *args: object) -> None:
+                self.calls.append(("attributes", args))
+
+            def after(self, delay: int, callback: object) -> None:
+                self.calls.append(("after", (delay, callback)))
+
+        root = FakeRoot()
+
+        self.assertIs(bubble_dictate.configure_hidden_event_root(root), root)
+        self.assertIn(("withdraw", ()), root.calls)
+        self.assertIn(("title", ("",)), root.calls)
+        self.assertIn(("geometry", ("1x1+-32000+-32000",)), root.calls)
+        self.assertIn(("overrideredirect", (True,)), root.calls)
+        self.assertIn(("attributes", ("-alpha", 0.0)), root.calls)
+        self.assertTrue(
+            any(call[0] == "after" and call[1][0] == 0 for call in root.calls),
+            "hidden root should be withdrawn again after Tk enters the event loop",
+        )
+
 
 class ControlBridgeTests(unittest.TestCase):
     def _json_response(self, command: str) -> dict:
@@ -945,6 +996,8 @@ class QuickHistoryPopoverBindingTests(unittest.TestCase):
 
         self.assertTrue(layout.get("pointer_smooth"))
         self.assertEqual(layout.get("tail_renderer"), "pillow")
+        self.assertEqual(layout.get("tail_shape"), "soft-rounded")
+        self.assertGreaterEqual(layout.get("tail_curve_radius", 0), 3)
         self.assertLessEqual(layout.get("pointer_tip_y_offset", 99), 10)
         self.assertLessEqual(
             layout["pointer_base_right"] - layout["pointer_base_left"],
@@ -1346,6 +1399,102 @@ class SettingsApplyTests(unittest.TestCase):
 
         self.assertEqual(bubble_dictate.SETTINGS["custom_models"], custom_models)
         self.assertEqual(bubble_dictate.SETTINGS["model"], "Repo Custom")
+
+    def test_json_control_set_settings_reloads_model_when_device_mode_changes(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+        requested = {
+            **bubble_dictate.settings.DEFAULT_SETTINGS,
+            "model": original_settings.get("model", "Balanced"),
+            "device_mode": "cpu",
+        }
+
+        class ImmediateThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None) -> None:
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs or {}
+
+            def start(self) -> None:
+                if self.target:
+                    self.target(*self.args, **self.kwargs)
+
+        try:
+            bubble_dictate.SETTINGS = {**original_settings, "device_mode": "auto"}
+            with (
+                patch.object(bubble_dictate.settings, "save_settings"),
+                patch.object(bubble_dictate, "restart_hotkey_listener"),
+                patch.object(bubble_dictate, "redraw_bubble_current_state"),
+                patch.object(bubble_dictate, "refresh_settings_panel"),
+                patch.object(bubble_dictate, "reload_model_for_settings") as reload_model,
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = bubble_dictate.handle_control_command(
+                    json.dumps({"cmd": "set-settings", "args": {"settings": requested}})
+                )
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        payload = json.loads(response)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["device_mode"], "cpu")
+        reload_model.assert_called_once_with(original_settings.get("model", "Balanced"))
+
+
+class ModelLoadingDeviceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_settings = dict(bubble_dictate.SETTINGS)
+        self.original_active_device = bubble_dictate.active_device
+
+    def tearDown(self) -> None:
+        bubble_dictate.SETTINGS = self.original_settings
+        bubble_dictate.active_device = self.original_active_device
+
+    def test_auto_device_tries_cuda_then_falls_back_to_cpu(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "auto"}
+        cuda_model = object()
+        cpu_model = object()
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model", return_value=cuda_model) as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model", return_value=cpu_model) as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", side_effect=[RuntimeError("cuda failed"), None]),
+        ):
+            loaded = bubble_dictate.load_model()
+
+        self.assertIs(loaded, cpu_model)
+        make_cuda.assert_called_once()
+        make_cpu.assert_called_once()
+        self.assertEqual(bubble_dictate.active_device, "cpu")
+
+    def test_cuda_device_does_not_fall_back_on_cuda_failure(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "cuda"}
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model", return_value=object()) as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model") as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", side_effect=RuntimeError("cuda failed")),
+        ):
+            with self.assertRaises(RuntimeError):
+                bubble_dictate.load_model()
+
+        make_cuda.assert_called_once()
+        make_cpu.assert_not_called()
+
+    def test_cpu_device_does_not_attempt_cuda(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "cpu"}
+        cpu_model = object()
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model") as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model", return_value=cpu_model) as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", return_value=None),
+        ):
+            loaded = bubble_dictate.load_model()
+
+        self.assertIs(loaded, cpu_model)
+        make_cuda.assert_not_called()
+        make_cpu.assert_called_once()
+        self.assertEqual(bubble_dictate.active_device, "cpu")
 
 
 class ModelDownloadTests(unittest.TestCase):

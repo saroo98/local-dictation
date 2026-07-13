@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AppState, BackendStatus, Bridge, Settings, UpdateCheck } from '@/bridge/types'
+import { BackendStatusProvider } from '@/bridge/BackendStatusProvider'
 import { BridgeContext } from '@/bridge/bridgeContext'
 import { HelpAboutPage } from '@/pages/HelpAboutPage'
 import { RecordingPage } from '@/pages/RecordingPage'
@@ -15,6 +16,7 @@ const defaultSettings: Settings = {
   language: 'English (US)',
   model: 'Balanced',
   model_order: 'Speed',
+  device_mode: 'auto',
   theme: 'Dark Mode',
   opacity: 96,
   text_format: 'Plain Text',
@@ -108,7 +110,7 @@ function renderWithBridge(ui: ReactNode, bridge: Bridge) {
   return render(
     <BridgeContext.Provider value={bridge}>
       <ThemeProvider>
-        {ui}
+        <BackendStatusProvider autoStartInTauri={false}>{ui}</BackendStatusProvider>
         <Toaster richColors closeButton position="bottom-right" />
       </ThemeProvider>
     </BridgeContext.Provider>,
