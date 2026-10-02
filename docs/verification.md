@@ -1,10 +1,12 @@
 # Implementation verification
 
 Checked on 2026-10-02 in `<repository>`, on the local
-`reliability-fixes` branch. HEAD remains `462ce3401ab6ab59cd1bdbc0ac2baae362ca1405`;
-the prior cleanup and these reliability changes are uncommitted. The installed
-June app has not been replaced. Native version remains 0.1.0, not a newly
-published release. [The original audit](audit.md) describes the baseline.
+`reliability-fixes` branch. The owner subsequently authorized committing all
+changes and installing the app. Source commit
+`5cccd1cd88dd80bd6c58e17df546aa33e005641b` includes the cleanup and reliability
+fixes, and the rebuilt app now replaces the June per-user installation. Native
+version remains 0.1.0; no new release was published.
+[The original audit](audit.md) describes baseline `462ce340`.
 
 ## What changed
 
@@ -60,9 +62,40 @@ after the completed production NSIS build. Final artifacts under
 | `local-dictation-backend.exe` | 104,654,303 | `92af884aab79069dc7100b2155ff0c22d3da41ce2dfeff7a9d5d2807fd6ccdcc` |
 | `bundle/nsis/Local Dictation_0.1.0_x64-setup.exe` | 1,426,099,870 | `a9690af6ba10477de21bebe2cfd4618997890514891888dd4a9a0c0a7e566b46` |
 
-The installer was built, not installed. Exact identities and the staged/adjacent
-CUDA resource comparison are recorded in
-`audit-evidence/implementation-verification.json`.
+These are the build artifacts. Their pre-commit identities and the
+staged/adjacent CUDA resource comparison are recorded in
+`audit-evidence/implementation-verification.json`. The installed package has the
+expected bundle-marker difference described below.
+
+## Installed upgrade
+
+The owner-authorized installer completed with exit code 0 in silent update
+mode (`/S /UPDATE`), replacing the existing per-user installation at
+`%LOCALAPPDATA%\Local Dictation`. The Start Menu shortcut points to
+the updated executable. Personal settings and history content hashes are
+unchanged. Previous executable backups are retained under ignored build output.
+
+Installed native SHA-256 is
+`8445f74b47dde69f514b934a94fa6f6a819773e932b5c5f4e28a28ddb29f1e9d`.
+Tauri's packaging changes `__TAURI_BUNDLE_TYPE_VAR_UNK` to
+`__TAURI_BUNDLE_TYPE_VAR_NSS`. A full byte comparison confirms those three bytes
+are the only difference from the standalone artifact. The installed backend
+and every one of the 17 CUDA DLLs match the verified build hashes.
+
+Fresh acceptance of this installed executable passes isolated recoverable
+startup, launch ownership, wrong-owner rejection and worker/port cleanup after
+controlled abrupt native exit. Passive checks pass the 56x56 bubble, centered
+44x44 button, HWND markers, utility activation responses and persistent Close
+behavior. These probes disabled hotkeys, used empty offline profiles and did
+not capture microphone audio or inject paste. The temporary app instances were
+stopped after the checks. This is an upgrade on this machine, not a clean-machine
+installation test.
+
+Evidence: `audit-evidence/installation-verification.json`,
+`audit-evidence/installed-native-owned-acceptance.json` and
+`audit-evidence/installed-native-passive-acceptance.json`. Fresh pre-commit tests
+again passed Python 189, frontend 82, Rust 21 plus the intentional fixture,
+typecheck, lint and Rust formatting.
 
 ## Audit finding accounting
 
@@ -171,16 +204,18 @@ monitor moves, OS hotkeys, real microphone dictation/paste and a clean-machine
 installer/CPU/GPU run remain unverified. The Windows job and frozen-model checks
 cover narrower real boundaries and do not replace those interactions.
 
-No app installation, shortcut installation, model download, Git commit, push,
-PR, publication or personal history/settings rewrite was performed. Ordinary
-unit tests used mocks; isolated real acceptance profiles disabled hotkeys and
-used empty offline caches. Existing personal logs may retain oversized historic
-backups until normal rotation; they were not deleted.
+The explicit owner follow-up authorized local Git commits and this machine's
+installed upgrade, including the installer's Start Menu shortcut. No push, PR,
+publication, model download or personal history/settings rewrite was performed.
+Ordinary unit tests used mocks; isolated real acceptance profiles disabled
+hotkeys and used empty offline caches. Existing personal logs may retain
+oversized historic backups until normal rotation; they were not deleted.
 
 ## Scope rulings
 
-The work kept one active folder and a local branch instead of another worktree;
-the cost is uncommitted changes. Durable status/evidence review the actual
+The work kept one active folder and a local branch instead of another worktree.
+Changes remained uncommitted during implementation until the owner authorized
+the commit/install follow-up. Durable status/evidence review the actual
 working files, including prior relocation, instead of commit-range-only skill
 artifacts. Separate frontend/native scopes were delegated only after shared
 contracts were defined, requiring parent integration. CUDA is packaged as

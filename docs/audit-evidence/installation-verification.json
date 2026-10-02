@@ -1,0 +1,185 @@
+{
+  "checked_on": "2026-10-02",
+  "source_commit": "5cccd1cd88dd80bd6c58e17df546aa33e005641b",
+  "installation_kind": "upgrade of existing per-user installation on this machine",
+  "installed_at": "%LOCALAPPDATA%\\Local Dictation",
+  "version": "0.1.0",
+  "installer_sha256": "a9690af6ba10477de21bebe2cfd4618997890514891888dd4a9a0c0a7e566b46",
+  "installer_exit_code": 0,
+  "installer_arguments": [
+    "/S",
+    "/UPDATE"
+  ],
+  "raw_native_sha256": "00ddb69b3aa7269f50550652d66b24da33dea952832fbc5a3f29240b177911aa",
+  "bundle_marker": {
+    "from": "__TAURI_BUNDLE_TYPE_VAR_UNK",
+    "to": "__TAURI_BUNDLE_TYPE_VAR_NSS",
+    "changed_bytes": 3,
+    "all_other_bytes_identical": true
+  },
+  "files": [
+    {
+      "name": "local-dictation-desktop.exe",
+      "bytes": 9862144,
+      "sha256": "8445f74b47dde69f514b934a94fa6f6a819773e932b5c5f4e28a28ddb29f1e9d",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "local-dictation-backend.exe",
+      "bytes": 104654303,
+      "sha256": "92af884aab79069dc7100b2155ff0c22d3da41ce2dfeff7a9d5d2807fd6ccdcc",
+      "matches_packaged_build": true
+    }
+  ],
+  "cuda_resources": [
+    {
+      "name": "cublas64_12.dll",
+      "bytes": 102518272,
+      "sha256": "52ce5ba0ec5327d39be6021f0f9362d2ed4d64d7206f9b5afc06398d827b8e82",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cublasLt64_12.dll",
+      "bytes": 668673536,
+      "sha256": "71705a7cf0923f4ab034d0d2620bbfc989ff669ac3d79f868b7a7c597ca559c5",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudart64_12.dll",
+      "bytes": 583680,
+      "sha256": "760c38928bbe5759f7b31ed6692599eb7ec83cedd5702e84c2b72028a89837e1",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn64_9.dll",
+      "bytes": 265840,
+      "sha256": "e53bcbf05770f660424425e44408c0846ca4dadc6df4e600e71bee98f38f917c",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_adv64_9.dll",
+      "bytes": 269016688,
+      "sha256": "cbbd08fdfc6834564466ccd03f111550326986b82770c7fd261d418f44c422c0",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_cnn64_9.dll",
+      "bytes": 2994288,
+      "sha256": "45fcc1d2fec4282561ab3281e400c8a358ce5f90a66dc0c43a6ec52f0e9fc754",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_engines_precompiled64_9.dll",
+      "bytes": 482154096,
+      "sha256": "9fe503070be52e6fcb945550b1e8ee92112d2b90deeb949c3b7488aca9a3c9c9",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_engines_runtime_compiled64_9.dll",
+      "bytes": 37865072,
+      "sha256": "ec2bf66aef75275baaa5f1a02b6b0f4daca9f4d8e2335c2df4ebf9be919c1194",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_engines_tensor_ir64_9.dll",
+      "bytes": 155248,
+      "sha256": "f227f97dd2ef29930bf97502d129a7df2a187644ee3fdd96cd679d6362d556fb",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_ext64_9.dll",
+      "bytes": 250480,
+      "sha256": "3c071c03527c8da31497f30aca7106a67821b5572495af46fdc8193a5b760cb7",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_graph64_9.dll",
+      "bytes": 99882608,
+      "sha256": "b3185a044c4569c23107b84c02fa598972b2b02718a2ad9e9f76a9610befa334",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_heuristic64_9.dll",
+      "bytes": 61770864,
+      "sha256": "bc152847b6ec803800679210b1ae2a16d639d5fd804655b8860b81459b73a41c",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "cudnn_ops64_9.dll",
+      "bytes": 105601136,
+      "sha256": "895e6a8cb796b461285ab48a536177fa0da3e59564098d852d2ab7321d6de099",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "nvblas64_12.dll",
+      "bytes": 334848,
+      "sha256": "f54ac264becdb8ac866cbc0cce74f1dfe0e0c1f6e60a0629f222490d210302cd",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "nvrtc-builtins64_129.dll",
+      "bytes": 7217664,
+      "sha256": "c405226b0b394ed8bdc593bb1419b94a989f93248ed2873e8f2e0e27c1688ca1",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "nvrtc64_120_0.alt.dll",
+      "bytes": 89899520,
+      "sha256": "ac56a4d3b5a99f294523abec28b8f648b96324a9277622a450ec20ddb9e2c47d",
+      "matches_packaged_build": true
+    },
+    {
+      "name": "nvrtc64_120_0.dll",
+      "bytes": 89832960,
+      "sha256": "0cc63349fedffeec1660b30955e8028b6e4e4c26cf1e41c56dc4569fd5eca82c",
+      "matches_packaged_build": true
+    }
+  ],
+  "cuda_bytes": 2019016800,
+  "runtime_data": [
+    {
+      "name": "settings.json",
+      "content_unchanged": true
+    },
+    {
+      "name": "transcript_history.json",
+      "content_unchanged": true
+    }
+  ],
+  "shortcuts": [
+    {
+      "path": "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Local Dictation.lnk",
+      "target": "%LOCALAPPDATA%\\Local Dictation\\local-dictation-desktop.exe",
+      "working_directory": "%LOCALAPPDATA%\\Local Dictation"
+    }
+  ],
+  "previous_binary_backup_verified": true,
+  "checks": {
+    "python": 189,
+    "frontend": 82,
+    "rust": 21,
+    "rust_controlled_fixture_ignored": 1,
+    "typecheck": "passed",
+    "lint": "passed",
+    "rust_format": "passed",
+    "installed_native_owned": "passed",
+    "installed_native_passive": "passed"
+  },
+  "real_microphone_capture": false,
+  "real_paste": false,
+  "clean_machine_installation": false,
+  "unverified": [
+    "actual pointer click/drag and focus",
+    "tray Quit",
+    "utility reopening/minimize",
+    "physical mixed-DPI monitors",
+    "OS hotkeys",
+    "real audio/paste",
+    "clean-machine installation"
+  ],
+  "passed": true,
+  "privacy_redactions": [
+    "machine-specific paths and test window identity",
+    "personal file metadata"
+  ]
+}

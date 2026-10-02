@@ -21,9 +21,9 @@ scope. Publishing and pushing are not requested.
 | Step | State | Evidence |
 | --- | --- | --- |
 | Verify source and installer | complete | Fresh Python 189, frontend 82, native 21, typecheck/lint/fmt pass; final artifact hashes match previous acceptance |
-| Commit project changes | in progress | Include source, tests and documentation; exclude ignored generated/personal files |
-| Install rebuilt app | pending | Upgrade the existing per-user Local Dictation installation |
-| Verify installed files and startup | pending | Compare executable/CUDA hashes and run isolated installed-app acceptance |
+| Commit project changes | complete | `5cccd1c` commits all 132 changed source/test/documentation files; generated/personal files excluded |
+| Install rebuilt app | complete | Verified NSIS installer exited 0 and updated the existing per-user installation |
+| Verify installed files and startup | complete | Installed binary/CUDA identities, isolated native startup/job exit and passive bubble checks pass; settings/history content unchanged |
 
 ## Implementation tasks
 
@@ -43,7 +43,7 @@ scope. Publishing and pushing are not requested.
 | T12 accessibility/styles | implemented and tested | Keyboard/labels/bounds and actual composite status/badge/icon checks |
 | T13 efficiency | implemented and tested | Audio ownership release; one model scan; bounded logs; unused frontend scaffolding removed |
 | T14 dependencies | implemented and triaged | Clean pinned Python/npm installs; PyPI58 zero matches; npm zero; Cargo notices triaged by Windows target |
-| T15 packaging/acceptance | all available checks passed; installation/interaction acceptance open | Frozen sidecar, production native and full GPU NSIS installer build; real CPU/CUDA warmup and native job/HWND checks. Final artifact, evidence, link and repository checks pass |
+| T15 packaging/acceptance | all available checks passed; clean-machine/interaction acceptance open | Production GPU NSIS build and this machine's installed upgrade verified; real CPU/CUDA warmup and native job/HWND checks pass. Clean-machine and interactive checks remain open |
 
 Pre-flight: T01/T03 produce loading/error state consumed by T08; T02 precedes
 T03/T04 writes; T03 partial settings are consumed by T07/T09/T10; T06 launch
@@ -197,4 +197,17 @@ verification confirms matching final native probe identities and CUDA resources,
 valid current document links/JSON evidence, no personal transcript matches in
 evidence, unchanged runtime settings/history metadata, one active worktree,
 no staged changes, a clean diff check and unchanged live remote master.
-The final source diff was reviewed. No installation or Git commit was made.
+The final source diff was reviewed. This initial implementation phase made no
+installation or Git commit; the later owner-authorized follow-up above records
+the source commit and installed upgrade.
+
+The rebuilt 0.1.0 app is now installed at
+`%LOCALAPPDATA%\Local Dictation`. The installed shell differs from
+the raw standalone build only in Tauri's three-byte NSIS bundle marker; every
+other byte, the frozen sidecar and all 17 CUDA DLLs match the verified build.
+Fresh installed owned/passive probes pass, and the Start Menu shortcut targets
+the updated executable. Personal settings/history content hashes are unchanged.
+Evidence: `docs/audit-evidence/installation-verification.json` and the two
+`installed-native-*-acceptance.json` files. Checks used isolated profiles and
+did not capture audio or paste. This upgrade does not prove clean-machine or
+the previously unverified interaction cases.

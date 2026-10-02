@@ -13,8 +13,13 @@ test output. The current result is described in `../verification.md`.
 
 Current implementation evidence:
 
-- `implementation-verification.json`: final source/check/artifact metadata and
-  runtime-data preservation checks.
+- `implementation-verification.json`: pre-commit source/check/artifact metadata
+  and runtime-data preservation checks at the end of implementation.
+- `installation-verification.json`: owner-authorized installed upgrade, exact
+  packaged-file identities, fresh checks and unchanged settings/history content.
+- `installed-native-owned-acceptance.json`, `installed-native-passive-acceptance.json`:
+  isolated real startup/job/port exit and passive HWND/bubble checks against the
+  installed package, which has Tauri's expected three-byte NSIS bundle marker.
 - `python-implementation-tests.log`, `python-clean-tests.log`: 189 passing tests.
 - `frontend-implementation-tests.log`: 82 passing tests across 17 files.
 - `native-implementation-tests.log`: 21 passing tests and one deliberately

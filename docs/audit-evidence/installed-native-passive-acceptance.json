@@ -1,0 +1,141 @@
+{
+  "candidate": "%LOCALAPPDATA%\\Local Dictation\\local-dictation-desktop.exe",
+  "backend": "independent controlled server",
+  "candidate_sha256": "8445f74b47dde69f514b934a94fa6f6a819773e932b5c5f4e28a28ddb29f1e9d",
+  "real_audio_capture": false,
+  "real_paste_injection": false,
+  "probe_stage": "passed passive checks",
+  "dpi": 96,
+  "initial_bubble_rect": [
+    40,
+    220,
+    96,
+    276
+  ],
+  "initial_bubble_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      40,
+      220,
+      96,
+      276
+    ],
+    "client_rect": [
+      0,
+      0,
+      56,
+      56
+    ],
+    "style": "0x14cb0000",
+    "extended_style": "0x8040118",
+    "visible": true,
+    "enabled": true
+  },
+  "initial_main_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      156,
+      156,
+      1272,
+      915
+    ],
+    "client_rect": [
+      0,
+      0,
+      1100,
+      720
+    ],
+    "style": "0x14cf0000",
+    "extended_style": "0x40110",
+    "visible": true,
+    "enabled": true
+  },
+  "initial_popover_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      286,
+      286,
+      696,
+      586
+    ],
+    "client_rect": [
+      0,
+      0,
+      410,
+      300
+    ],
+    "style": "0x4cb0000",
+    "extended_style": "0x8040118",
+    "visible": false,
+    "enabled": true
+  },
+  "mode": "passive; no pointer or keyboard interaction",
+  "markers": {
+    "Local Dictation Quick History": true,
+    "Local Dictation Bubble": true,
+    "Local Dictation": true
+  },
+  "bubble_client_size": [
+    56,
+    56
+  ],
+  "mouse_activation_responses": {
+    "bubble": [
+      3,
+      3,
+      3
+    ],
+    "popover": [
+      3,
+      3,
+      3
+    ]
+  },
+  "bubble_accessibility_tree": {
+    "root_name": "Local Dictation Bubble",
+    "root_class": "Tauri Window",
+    "descendant_count": 22,
+    "names": [
+      "",
+      "Local Dictation",
+      "",
+      "Local Dictation - Web content",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Local Dictation",
+      "",
+      "",
+      "Toggle recording",
+      "Notifications alt+T",
+      ""
+    ]
+  },
+  "main_close_hides_persistent_window": true,
+  "bubble_button_rect": [
+    46,
+    226,
+    90,
+    270
+  ],
+  "embedded_bubble_control": "present in native UI Automation",
+  "utility_close_hides_persistent_windows": true,
+  "independent_backend_shutdown_requested": false,
+  "checks_not_performed": [
+    "actual click/drag delivery and focus",
+    "tray Quit",
+    "mixed-DPI physical monitors",
+    "real audio and hotkeys"
+  ],
+  "privacy_redactions": [
+    "machine-specific paths and test window identity",
+    "process/window identifiers and foreground diagnostics"
+  ]
+}
