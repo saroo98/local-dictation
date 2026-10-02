@@ -1,0 +1,22 @@
+{
+  "kind": "frozen",
+  "startup_seconds": 2.656,
+  "exit_code": 0,
+  "worker_exited": true,
+  "empty_cache_recovery": "passed",
+  "malformed_and_stalled_clients": "passed",
+  "wrong_owner_shutdown": "rejected",
+  "recording_without_model": "rejected",
+  "partial_settings": "passed",
+  "hidden_root_position": "preserved",
+  "real_microphone_capture": false,
+  "model_validation": {
+    "offline_local_model": "tiny.en",
+    "cpu_load_and_synthetic_warmup_seconds": 0.422,
+    "cuda_load_and_synthetic_warmup_seconds": 1.328,
+    "microphone_opened": false
+  },
+  "privacy_redactions": [
+    "process/window identifiers and foreground diagnostics"
+  ]
+}

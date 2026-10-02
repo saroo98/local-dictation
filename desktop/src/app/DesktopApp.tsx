@@ -7,7 +7,7 @@ export function DesktopApp() {
 
   return (
     <AppShell navigation={navigation}>
-      <Page />
+      <Page onNavigate={navigation.setActiveRouteId} />
     </AppShell>
   )
 }

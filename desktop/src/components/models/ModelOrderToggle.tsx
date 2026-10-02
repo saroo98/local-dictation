@@ -10,6 +10,7 @@ export function ModelOrderToggle({ value, onChange }: { value: ModelOrder; onCha
         variant={value === 'Speed' ? 'default' : 'ghost'}
         onClick={() => onChange('Speed')}
         aria-label="Speed order"
+        aria-pressed={value === 'Speed'}
       >
         Speed
       </Button>
@@ -19,6 +20,7 @@ export function ModelOrderToggle({ value, onChange }: { value: ModelOrder; onCha
         variant={value === 'Accuracy' ? 'default' : 'ghost'}
         onClick={() => onChange('Accuracy')}
         aria-label="Accuracy order"
+        aria-pressed={value === 'Accuracy'}
       >
         Accuracy
       </Button>

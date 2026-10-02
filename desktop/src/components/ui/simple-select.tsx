@@ -23,6 +23,7 @@ export function SimpleSelect({
   options,
   onValueChange,
   className,
+  disabled,
 }: {
   id?: string
   ariaLabel?: string
@@ -30,11 +31,12 @@ export function SimpleSelect({
   options: SimpleSelectOption[]
   onValueChange: (value: string) => void
   className?: string
+  disabled?: boolean
 }) {
   const selectedOption = options.find((option) => option.value === value)
 
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger id={id} aria-label={ariaLabel} className={cn(className)}>
         {selectedOption?.selectedContent ?? <SelectValue />}
       </SelectTrigger>

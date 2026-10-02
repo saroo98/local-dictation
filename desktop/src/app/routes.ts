@@ -10,12 +10,16 @@ import { SettingsPage } from '@/pages/SettingsPage'
 
 export type RouteId = 'recording' | 'history' | 'models' | 'settings' | 'exports' | 'help'
 
+export interface RoutePageProps {
+  onNavigate?: (route: RouteId) => void
+}
+
 export interface AppRoute {
   id: RouteId
   label: string
   title: string
   icon: ComponentType<{ className?: string; strokeWidth?: number }>
-  component: ComponentType
+  component: ComponentType<RoutePageProps>
 }
 
 export const routes: AppRoute[] = [

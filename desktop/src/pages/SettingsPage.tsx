@@ -1,8 +1,9 @@
 import { Save } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useBridge } from '@/bridge/bridgeContext'
+import { useRuntimeState } from '@/bridge/useRuntimeState'
 import type { DeviceMode, ModelInfo, Settings, ThemeMode, ThemePreset } from '@/bridge/types'
 import { HotkeyInput } from '@/components/settings/HotkeyInput'
 import { SettingsField } from '@/components/settings/SettingsField'
@@ -11,76 +12,140 @@ import { PageHeader } from '@/components/shell/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SimpleSelect } from '@/components/ui/simple-select'
-import { Slider } from '@/components/ui/slider'
 import { deviceModeChoices, languageChoices, textFormatChoices } from '@/fixtures/settings'
 import { themeModes, themePresets } from '@/theme/theme-presets'
 import { useTheme } from '@/theme/use-theme'
+import { validHotkey } from '@/lib/hotkey'
 
 export function SettingsPage() {
   const bridge = useBridge()
   const theme = useTheme()
+  const { state, backendReady } = useRuntimeState()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [models, setModels] = useState<ModelInfo[]>([])
   const [saved, setSaved] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const patch = useRef<Partial<Settings>>({})
+  const savePending = useRef(false)
+  const readId = useRef(0)
+  const savedTimer = useRef<number | undefined>(undefined)
+  const canRead = backendReady && state?.connected !== false
+  const formDisabled = saving || !canRead || Boolean(state?.loading)
+
+  const loadSettings = useCallback(async () => {
+    if (savePending.current) return
+    const id = ++readId.current
+    try {
+      const next = await bridge.getSettings()
+      if (id === readId.current) {
+        setSettings({ ...next, ...patch.current })
+        setLoadError(null)
+      }
+    } catch (error) {
+      if (id === readId.current) setLoadError(error instanceof Error ? error.message : 'Could not load settings')
+    }
+  }, [bridge])
 
   useEffect(() => {
-    void bridge
-      .getSettings()
-      .then((next) => {
-        setSettings(next)
-        setLoadError(null)
-      })
-      .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : 'Could not load settings')
-      })
-  }, [bridge])
+    if (canRead) void loadSettings()
+    return () => { readId.current += 1 }
+  }, [canRead, loadSettings])
+
+  useEffect(() => () => { if (savedTimer.current !== undefined) window.clearTimeout(savedTimer.current) }, [])
 
   const modelOrder = settings?.model_order
 
   useEffect(() => {
-    if (!modelOrder) return undefined
+    if (!modelOrder || !canRead) return undefined
 
     let cancelled = false
     void bridge
       .getModels(modelOrder)
       .then((nextModels) => {
-        if (!cancelled) setModels(nextModels)
+        if (!cancelled) { setModels(nextModels); setModelsError(null) }
       })
-      .catch(() => {
-        if (!cancelled) setModels([])
+      .catch((error: unknown) => {
+        if (!cancelled) setModelsError(error instanceof Error ? error.message : 'Could not load models')
       })
 
     return () => {
       cancelled = true
     }
-  }, [bridge, modelOrder])
+  }, [bridge, canRead, modelOrder])
 
-  if (!settings) return <PageHeader title="Settings" description={loadError ?? 'Loading settings...'} />
+  function edit<K extends keyof Settings>(key: K, value: Settings[K]) {
+    if (savePending.current) return
+    patch.current = { ...patch.current, [key]: value }
+    setSettings((current) => current ? { ...current, [key]: value } : current)
+    setSaved(false)
+    setSaveError(null)
+  }
+
+  async function browse() {
+    if (browsing || savePending.current) return
+    setBrowsing(true)
+    try {
+      const folder = await bridge.pickExportFolder()
+      if (folder !== null) edit('save_location', folder)
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not choose a folder') }
+    finally { setBrowsing(false) }
+  }
+
+  if (!settings) return (
+    <div>
+      <PageHeader title="Settings" description={loadError ?? (backendReady ? 'Loading settings...' : 'Waiting for the backend...')} />
+      {loadError ? <Button variant="outline" onClick={() => void loadSettings()} disabled={!canRead}>Retry settings</Button> : null}
+    </div>
+  )
 
   async function saveChanges() {
-    if (!settings) return
+    if (!settings || savePending.current || formDisabled) return
+    if (!validHotkey(settings.hotkey)) {
+      setSaveError('Invalid shortcut. Use a letter, function or arrow key, such as <ctrl>+<space>.')
+      return
+    }
+    savePending.current = true
+    readId.current += 1
+    setSaving(true)
+    setSaveError(null)
     try {
-      const savedSettings = await bridge.saveSettings(settings)
-      if (savedSettings) setSettings(savedSettings)
+      const savedSettings = await bridge.saveSettings(patch.current, { recover: true })
+      patch.current = {}
+      setSettings(savedSettings)
       setSaved(true)
       toast.success('Settings saved')
-      window.setTimeout(() => setSaved(false), 1800)
+      if (savedTimer.current !== undefined) window.clearTimeout(savedTimer.current)
+      savedTimer.current = window.setTimeout(() => setSaved(false), 1800)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not save settings')
-    }
+      const message = error instanceof Error ? error.message : 'Could not save settings'
+      setSaveError(message)
+      toast.error(message)
+    } finally { savePending.current = false; setSaving(false) }
   }
 
   return (
     <div>
       <PageHeader title="Settings" description="Transcription, output, and shortcut controls." />
-      <div className="space-y-4">
+      {state?.settings_error ? <p role="alert" className="mb-4 text-sm text-destructive">
+        {state.settings_error} Save changes to recover these settings. The unreadable file will be backed up first.
+      </p> : null}
+      {loadError || !canRead ? (
+        <div role="alert" className="mb-4 flex items-center gap-3 text-sm text-destructive">
+          <p>{loadError ?? state?.connection_error ?? 'Waiting for the backend...'}</p>
+          <Button variant="outline" onClick={() => void loadSettings()} disabled={!canRead || saving}>Retry settings</Button>
+        </div>
+      ) : null}
+      <fieldset disabled={formDisabled || browsing} className="min-w-0 space-y-4">
         <SettingsSection title="Transcription">
           <SettingsField id="language" label="Input Language">
             <SimpleSelect
               id="language"
               value={settings.language}
-              onValueChange={(language) => setSettings({ ...settings, language })}
+              onValueChange={(language) => edit('language', language)}
               options={languageChoices.map((choice) => ({ label: choice, value: choice }))}
             />
           </SettingsField>
@@ -88,15 +153,15 @@ export function SettingsPage() {
             <SimpleSelect
               id="model"
               value={settings.model}
-              onValueChange={(model) => setSettings({ ...settings, model })}
-              options={modelOptions(models)}
+              onValueChange={(model) => edit('model', model)}
+              options={modelOptions(models, settings.model)}
             />
           </SettingsField>
           <SettingsField id="model-order" label="Model Order">
             <SimpleSelect
               id="model-order"
               value={settings.model_order}
-              onValueChange={(modelOrder) => setSettings({ ...settings, model_order: modelOrder as Settings['model_order'] })}
+              onValueChange={(modelOrder) => edit('model_order', modelOrder as Settings['model_order'])}
               options={['Speed', 'Accuracy'].map((choice) => ({ label: choice, value: choice }))}
             />
           </SettingsField>
@@ -109,7 +174,7 @@ export function SettingsPage() {
               id="device-mode"
               ariaLabel="Device"
               value={settings.device_mode}
-              onValueChange={(deviceMode) => setSettings({ ...settings, device_mode: deviceMode as DeviceMode })}
+              onValueChange={(deviceMode) => edit('device_mode', deviceMode as DeviceMode)}
               options={deviceModeChoices}
             />
           </SettingsField>
@@ -119,7 +184,7 @@ export function SettingsPage() {
           <SettingsField id="appearance" label="Appearance">
             <SimpleSelect
               id="appearance"
-              aria-label="Appearance"
+              ariaLabel="Appearance"
               value={theme.mode}
               onValueChange={(mode) => theme.setMode(mode as ThemeMode)}
               options={themeModes}
@@ -128,30 +193,17 @@ export function SettingsPage() {
           <SettingsField id="theme-preset" label="Theme Preset">
             <SimpleSelect
               id="theme-preset"
-              aria-label="Theme Preset"
+              ariaLabel="Theme Preset"
               value={theme.preset}
               onValueChange={(preset) => theme.setPreset(preset as ThemePreset)}
               options={themePresets}
             />
           </SettingsField>
-          <SettingsField id="opacity" label="Panel Opacity">
-            <div className="flex items-center gap-4">
-              <Slider
-                id="opacity"
-                value={[settings.opacity]}
-                min={50}
-                max={100}
-                step={5}
-                onValueChange={([opacity]) => setSettings({ ...settings, opacity: opacity ?? 100 })}
-              />
-              <span className="w-12 text-sm text-muted-foreground">{settings.opacity}%</span>
-            </div>
-          </SettingsField>
           <SettingsField id="text-format" label="Text Format">
             <SimpleSelect
               id="text-format"
               value={settings.text_format}
-              onValueChange={(textFormat) => setSettings({ ...settings, text_format: textFormat })}
+              onValueChange={(textFormat) => edit('text_format', textFormat)}
               options={textFormatChoices.map((choice) => ({ label: choice, value: choice }))}
             />
           </SettingsField>
@@ -160,10 +212,10 @@ export function SettingsPage() {
               <Input
                 id="save-location"
                 value={settings.save_location}
-                onChange={(event) => setSettings({ ...settings, save_location: event.target.value })}
+                onChange={(event) => edit('save_location', event.target.value)}
               />
-              <Button type="button" variant="outline">
-                Browse
+              <Button type="button" variant="outline" onClick={() => void browse()} disabled={browsing}>
+                {browsing ? 'Choosing...' : 'Browse'}
               </Button>
             </div>
           </SettingsField>
@@ -175,43 +227,25 @@ export function SettingsPage() {
             label="Start/Stop Key"
             help="Click the bubble to record at any time. Example hotkey: <ctrl>+<alt>+d. Leave blank to disable."
           >
-            <HotkeyInput value={settings.hotkey} onChange={(hotkey) => setSettings({ ...settings, hotkey })} />
+            <HotkeyInput value={settings.hotkey} onChange={(hotkey) => edit('hotkey', hotkey)} disabled={formDisabled} />
           </SettingsField>
         </SettingsSection>
-      </div>
+      </fieldset>
+      {modelsError ? <p role="alert" className="mt-3 text-sm text-destructive">{modelsError}</p> : null}
+      {saveError ? <p role="alert" className="mt-3 text-sm text-destructive">{saveError}</p> : null}
       <div className="mt-5 flex justify-end gap-3">
         {saved ? <span className="self-center text-sm text-primary">Settings saved</span> : null}
-        <Button type="button" onClick={() => void saveChanges()}>
-          <Save className="h-4 w-4" /> Save changes
+        <Button type="button" disabled={formDisabled || browsing} onClick={() => void saveChanges()}>
+          <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save changes'}
         </Button>
       </div>
     </div>
   )
 }
 
-function modelOptions(models: ModelInfo[]) {
-  const fallbackModels: ModelInfo[] = [
-    { tier: 'Fast', size_text: '464 MB' },
-    { tier: 'Balanced', size_text: '1.62 GB' },
-    { tier: 'High Accuracy', size_text: '2.88 GB' },
-    { tier: 'Ultra Fast English', size_text: '79 MB' },
-    { tier: 'Compact Multilingual', size_text: '145 MB' },
-    { tier: 'Medium Quality', size_text: '1.53 GB' },
-  ].map((model, index) => ({
-    model_name: model.tier,
-    repo_id: '',
-    description: '',
-    cache_dir: '',
-    available: false,
-    revision: '',
-    size_bytes: 0,
-    source_type: 'builtin',
-    custom: false,
-    speed_rank: index + 1,
-    accuracy_rank: index + 1,
-    ...model,
-  }))
-  const source = models.length > 0 ? models : fallbackModels
+function modelOptions(models: ModelInfo[], currentModel: string) {
+  if (models.length === 0) return [{ label: currentModel, value: currentModel }]
+  const source = models
 
   return source.map((model) => {
     const label = `${model.tier} (${model.size_text})`

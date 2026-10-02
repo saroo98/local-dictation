@@ -1,0 +1,17 @@
+{
+  "candidate": "<repository>\\desktop\\src-tauri\\target\\release\\local-dictation-desktop.exe",
+  "candidate_sha256": "00ddb69b3aa7269f50550652d66b24da33dea952832fbc5a3f29240b177911aa",
+  "real_microphone_capture": false,
+  "real_paste": false,
+  "shutdown_method": "controlled abrupt native exit; tests the managed job, not tray Quit",
+  "protocol": 4,
+  "recoverable_empty_cache_startup": true,
+  "wrong_owner_shutdown_rejected": true,
+  "owned_worker_exited": true,
+  "owned_control_port_closed": true,
+  "passed": true,
+  "privacy_redactions": [
+    "machine-specific paths and test window identity",
+    "process/window identifiers and foreground diagnostics"
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default desktop window capability set for Phase 1 mock UI.",
+  "description": "Local window events, bubble dragging and native app metadata.",
   "windows": ["main", "bubble", "quick-popover"],
-  "permissions": ["core:event:default", "core:window:allow-start-dragging"]
+  "permissions": ["core:event:default", "core:window:allow-start-dragging", "core:app:allow-version"]
 }

@@ -14,8 +14,8 @@ export const defaultSettings: Settings = {
   custom_models: [],
 }
 
-export const languageChoices = ['English (US)', 'Auto Detect', 'Kurdish', 'Arabic', 'Spanish']
-export const textFormatChoices = ['Plain Text', 'Markdown']
+export const languageChoices = ['English (US)', 'Auto Detect', 'Kurdish', 'Persian', 'Arabic']
+export const textFormatChoices = ['Plain Text', 'Markdown (.md)']
 export const deviceModeChoices = [
   { label: 'Auto (CUDA -> CPU)', value: 'auto' },
   { label: 'CUDA (NVIDIA only)', value: 'cuda' },

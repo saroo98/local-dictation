@@ -13,4 +13,11 @@ describe('recording page', () => {
 
     expect(await screen.findByRole('button', { name: /stop recording/i })).toBeInTheDocument()
   })
+
+  it('opens History through the existing route navigation', async () => {
+    render(<App />)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Open History' }))
+    expect(screen.getByRole('heading', { name: 'History', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-current', 'page')
+  })
 })

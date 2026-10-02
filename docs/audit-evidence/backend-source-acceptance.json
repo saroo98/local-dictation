@@ -1,0 +1,16 @@
+{
+  "kind": "source",
+  "startup_seconds": 1.594,
+  "exit_code": 0,
+  "worker_exited": true,
+  "empty_cache_recovery": "passed",
+  "malformed_and_stalled_clients": "passed",
+  "wrong_owner_shutdown": "rejected",
+  "recording_without_model": "rejected",
+  "partial_settings": "passed",
+  "hidden_root_position": "preserved",
+  "real_microphone_capture": false,
+  "privacy_redactions": [
+    "process/window identifiers and foreground diagnostics"
+  ]
+}

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AppState, BackendStatus, Bridge, HistoryEntry, ModelInfo, Settings, UpdateCheck } from '@/bridge/types'
+import type { AppState, BackendStatus, Bridge, HistoryEntry, ModelInfo, Settings } from '@/bridge/types'
 import { BackendStatusProvider } from '@/bridge/BackendStatusProvider'
 import { BridgeContext } from '@/bridge/bridgeContext'
 import { HistoryPage } from '@/pages/HistoryPage'
@@ -59,7 +59,7 @@ const readyBackend: BackendStatus = {
 function createTestBridge(overrides: Partial<Bridge> = {}): Bridge {
   return {
     getSettings: vi.fn(async () => defaultSettings),
-    saveSettings: vi.fn(async () => undefined),
+    saveSettings: vi.fn(async (patch: Partial<Settings>) => ({ ...defaultSettings, ...patch })),
     getHistory: vi.fn(async () => []),
     clearHistory: vi.fn(async () => undefined),
     exportHistory: vi.fn(async () => 'C:\\exports\\history.txt'),
@@ -73,7 +73,8 @@ function createTestBridge(overrides: Partial<Bridge> = {}): Bridge {
     startRecording: vi.fn(async () => undefined),
     stopRecording: vi.fn(async () => undefined),
     toggleRecording: vi.fn(async () => undefined),
-    checkForUpdates: vi.fn(async (): Promise<UpdateCheck> => ({ current: 'test' })),
+    pickExportFolder: vi.fn(async () => null),
+    retryResources: vi.fn(async () => undefined),
     getBackendStatus: vi.fn(async () => readyBackend),
     startBackend: vi.fn(async () => readyBackend),
     stopBackend: vi.fn(async () => readyBackend),
@@ -164,14 +165,14 @@ describe('stage 3 UI behavior', () => {
 
     await user.click(await screen.findByRole('button', { name: /save changes/i }))
 
-    expect(await screen.findByText(/Model is not installed locally: Fast/i)).toBeInTheDocument()
+    expect((await screen.findAllByText(/Model is not installed locally: Fast/i)).length).toBeGreaterThan(0)
     expect(screen.getByText('Balanced')).toBeInTheDocument()
   })
 
-  it('describes Stage 5 backend sidecar controls in Help/About', async () => {
+  it('describes native local backend controls in Help/About', async () => {
     renderWithBridge(<HelpAboutPage />, createTestBridge())
 
-    expect(await screen.findByText(/Stage 5 can start the packaged local backend sidecar/i)).toBeInTheDocument()
+    expect(await screen.findByText(/The native app starts the packaged local backend/i)).toBeInTheDocument()
     expect(screen.getByText(/Real backend start\/stop controls require the Tauri runtime/i)).toBeInTheDocument()
   })
 })

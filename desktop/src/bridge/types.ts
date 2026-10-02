@@ -56,12 +56,14 @@ export interface AppState {
   latestTranscript: string
   activeModel: string
   activeLanguage: string
-}
-
-export interface UpdateCheck {
-  current: string
-  latest?: string
-  url?: string
+  loading?: boolean
+  error?: string
+  settings_error?: string
+  history_error?: string
+  recording_ready?: boolean
+  history_revision?: number
+  connected?: boolean
+  connection_error?: string
 }
 
 export interface BackendHealth {
@@ -74,6 +76,7 @@ export interface BackendHealth {
   language: string
   device: string
   uptime_seconds: number
+  launch_id?: string
 }
 
 export interface BackendStatus {
@@ -92,7 +95,8 @@ export type BackendStopResult = BackendStatus
 
 export interface Bridge {
   getSettings(): Promise<Settings>
-  saveSettings(settings: Settings): Promise<Settings | void>
+  saveSettings(patch: Partial<Settings>, options?: { recover?: boolean }): Promise<Settings>
+  pickExportFolder(): Promise<string | null>
   getHistory(): Promise<HistoryEntry[]>
   clearHistory(): Promise<void>
   exportHistory(format: 'txt' | 'md'): Promise<string>
@@ -106,7 +110,7 @@ export interface Bridge {
   startRecording(): Promise<void>
   stopRecording(): Promise<void>
   toggleRecording(): Promise<void>
-  checkForUpdates(): Promise<UpdateCheck>
+  retryResources(): Promise<void>
   getBackendStatus(): Promise<BackendStatus>
   startBackend(): Promise<BackendStartResult>
   stopBackend(): Promise<BackendStopResult>

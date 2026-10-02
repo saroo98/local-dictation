@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 import { isTauriRuntime } from '@/bridge'
 import { BackendStatusContext } from '@/bridge/BackendStatusContext'
@@ -46,48 +48,62 @@ export function BackendStatusProvider({
   const bridge = useBridge()
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null)
   const autoStartAttempted = useRef(false)
+  const statusVersion = useRef(0)
+  const statusRead = useRef<Promise<BackendStatus> | null>(null)
+  const operation = useRef<Promise<BackendStatus> | null>(null)
+  const mounted = useRef(true)
   const pollingActive = autoStartInTauri || isTauriRuntime()
 
   const refreshBackendStatus = useCallback(async () => {
-    try {
-      const next = await bridge.getBackendStatus()
+    if (operation.current) return operation.current.catch(errorStatus)
+    if (statusRead.current) return statusRead.current
+    statusRead.current = (async () => {
+      for (;;) {
+        if (operation.current) return operation.current.catch(errorStatus)
+        const version = statusVersion.current
+        const next = await bridge.getBackendStatus().catch(errorStatus)
+        if (!mounted.current) return next
+        if (version !== statusVersion.current) continue
+        setBackendStatus(next)
+        return next
+      }
+    })().finally(() => { statusRead.current = null })
+    return statusRead.current
+  }, [bridge])
+
+  const runOperation = useCallback((action: () => Promise<BackendStatus>, status: BackendStatus['status'], message: string) => {
+    if (operation.current) return Promise.reject(new Error('A backend operation is already in progress.'))
+    statusVersion.current += 1
+    setBackendStatus((current) => transitionalStatus(status, message, current))
+    operation.current = Promise.resolve().then(action).then((next) => {
       setBackendStatus(next)
       return next
-    } catch (error) {
-      const next = errorStatus(error)
-      setBackendStatus(next)
-      return next
-    }
-  }, [bridge])
+    }).catch((error: unknown) => {
+      setBackendStatus(errorStatus(error))
+      throw error
+    }).finally(() => { statusVersion.current += 1; operation.current = null })
+    return operation.current
+  }, [])
 
-  const startBackend = useCallback(async () => {
-    setBackendStatus((current) => transitionalStatus('starting', 'Backend starting.', current))
-    const next = await bridge.startBackend()
-    setBackendStatus(next)
-    return next
-  }, [bridge])
-
-  const stopBackend = useCallback(async () => {
-    setBackendStatus((current) => transitionalStatus('stopping', 'Backend stopping.', current))
-    const next = await bridge.stopBackend()
-    setBackendStatus(next)
-    return next
-  }, [bridge])
-
-  const restartBackend = useCallback(async () => {
-    setBackendStatus((current) => transitionalStatus('starting', 'Backend restarting.', current))
-    const next = await bridge.restartBackend()
-    setBackendStatus(next)
-    return next
-  }, [bridge])
+  const startBackend = useCallback(() => runOperation(() => bridge.startBackend(), 'starting', 'Backend starting.'), [bridge, runOperation])
+  const stopBackend = useCallback(() => runOperation(() => bridge.stopBackend(), 'stopping', 'Backend stopping.'), [bridge, runOperation])
+  const restartBackend = useCallback(() => runOperation(() => bridge.restartBackend(), 'starting', 'Backend restarting.'), [bridge, runOperation])
 
   useEffect(() => {
+    mounted.current = true
     let cancelled = false
     let timer: number | undefined
+    let running = false
+    let nativeVisible: boolean | undefined
+    let visibilityVersion = 0
+    let unlisten: (() => void) | undefined
+    const visible = () => nativeVisible ?? !document.hidden
 
-    async function tick() {
+    async function tick(initial = false) {
+      if (cancelled || running || (!initial && !visible())) return
+      running = true
       let next = await refreshBackendStatus()
-      if (cancelled) return
+      if (cancelled) { running = false; return }
       if (
         autoStartInTauri &&
         !autoStartAttempted.current &&
@@ -96,24 +112,50 @@ export function BackendStatusProvider({
         autoStartAttempted.current = true
         try {
           next = await startBackend()
-        } catch {
-          // The explicit backend status poll will surface the error message.
+        } catch (error) {
+          next = errorStatus(error)
         }
       }
 
       const delay = nextPollDelay(next, pollingActive)
-      if (delay !== null) {
+      running = false
+      if (delay !== null && visible()) {
         timer = window.setTimeout(() => {
           void tick()
         }, delay)
       }
     }
 
-    void tick()
+    const refreshWhenVisible = () => {
+      if (timer !== undefined) window.clearTimeout(timer)
+      timer = undefined
+      if (visible()) void tick()
+    }
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    if (isTauriRuntime()) {
+      void listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
+        visibilityVersion += 1
+        nativeVisible = payload
+        refreshWhenVisible()
+      }).then(async (off) => {
+        if (cancelled) { off(); return }
+        unlisten = off
+        try {
+          const version = visibilityVersion
+          const initial = await invoke<boolean>('current_window_visible')
+          if (!cancelled && version === visibilityVersion && typeof initial === 'boolean') { nativeVisible = initial; refreshWhenVisible() }
+        } catch { /* Keep DOM visibility if the native visibility read fails. */ }
+      }).catch(() => undefined)
+    }
+    void tick(true)
 
     return () => {
+      mounted.current = false
       cancelled = true
+      statusVersion.current += 1
       if (timer !== undefined) window.clearTimeout(timer)
+      unlisten?.()
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
   }, [autoStartInTauri, pollingActive, refreshBackendStatus, startBackend])
 

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AppState, BackendStatus, Bridge, Settings, UpdateCheck } from '@/bridge/types'
+import type { AppState, BackendStatus, Bridge, Settings } from '@/bridge/types'
 import { BackendStatusProvider } from '@/bridge/BackendStatusProvider'
 import { BridgeContext } from '@/bridge/bridgeContext'
 import { HelpAboutPage } from '@/pages/HelpAboutPage'
@@ -82,7 +82,7 @@ const browserMockBackend: BackendStatus = {
 function createTestBridge(overrides: Partial<Bridge> = {}): Bridge {
   return {
     getSettings: vi.fn(async () => defaultSettings),
-    saveSettings: vi.fn(async () => undefined),
+    saveSettings: vi.fn(async (patch: Partial<Settings>) => ({ ...defaultSettings, ...patch })),
     getHistory: vi.fn(async () => []),
     clearHistory: vi.fn(async () => undefined),
     exportHistory: vi.fn(async () => 'C:\\exports\\history.txt'),
@@ -96,7 +96,8 @@ function createTestBridge(overrides: Partial<Bridge> = {}): Bridge {
     startRecording: vi.fn(async () => undefined),
     stopRecording: vi.fn(async () => undefined),
     toggleRecording: vi.fn(async () => undefined),
-    checkForUpdates: vi.fn(async (): Promise<UpdateCheck> => ({ current: 'test' })),
+    pickExportFolder: vi.fn(async () => null),
+    retryResources: vi.fn(async () => undefined),
     getBackendStatus: vi.fn(async () => readyBackend),
     startBackend: vi.fn(async () => readyBackend),
     stopBackend: vi.fn(async () => notRunningBackend),
@@ -146,14 +147,14 @@ describe('stage 4 backend lifecycle UI', () => {
 
     await user.click(await screen.findByRole('button', { name: /^Start backend$/i }))
     expect(bridge.startBackend).toHaveBeenCalledOnce()
-    expect(await screen.findByText('Local backend ready.')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Local backend ready.')
 
     await user.click(screen.getByRole('button', { name: /^Restart backend$/i }))
     expect(bridge.restartBackend).toHaveBeenCalledOnce()
 
     await user.click(screen.getByRole('button', { name: /^Stop backend$/i }))
     expect(bridge.stopBackend).toHaveBeenCalledOnce()
-    expect(await screen.findByText('Backend not running.')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Backend not running.')
   })
 
   it('disables backend process controls for browser mock mode', async () => {

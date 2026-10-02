@@ -35,6 +35,7 @@ export function Sidebar({ navigation }: SidebarProps) {
                 active && 'bg-secondary text-foreground shadow-sm',
               )}
               onClick={() => navigation.setActiveRouteId(route.id)}
+              aria-current={active ? 'page' : undefined}
             >
               <Icon className="h-4 w-4" strokeWidth={1.85} />
               {route.label}
@@ -44,8 +45,8 @@ export function Sidebar({ navigation }: SidebarProps) {
       </nav>
 
       <div className="mt-auto rounded-xl border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Stage 5</p>
-        <p className="mt-1 leading-5">Tauri can use the packaged backend sidecar. Browser review stays mock-backed.</p>
+        <p className="font-medium text-foreground">Local Dictation</p>
+        <p className="mt-1 leading-5">Offline speech recognition. Browser preview uses simulated data.</p>
       </div>
     </aside>
   )

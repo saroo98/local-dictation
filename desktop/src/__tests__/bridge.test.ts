@@ -63,12 +63,12 @@ describe('mock bridge', () => {
     vi.useRealTimers()
   })
 
-  it('persists settings and exports history', async () => {
+  it('persists settings and identifies unavailable browser exports', async () => {
     const bridge = createMockBridge()
     await bridge.saveSettings({ ...(await bridge.getSettings()), model: 'Fast' })
     await expect(bridge.getSettings()).resolves.toMatchObject({ model: 'Fast' })
 
-    await expect(bridge.exportHistory('txt')).resolves.toContain('Project update')
-    await expect(bridge.exportHistory('md')).resolves.toContain('- **')
+    await expect(bridge.exportHistory('txt')).rejects.toThrow(/native app/i)
+    await expect(bridge.exportHistory('md')).rejects.toThrow(/native app/i)
   })
 })

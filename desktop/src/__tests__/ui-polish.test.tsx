@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AppState, BackendStatus, Bridge, Settings, UpdateCheck } from '@/bridge/types'
+import type { AppState, BackendStatus, Bridge, Settings } from '@/bridge/types'
 import { BridgeContext } from '@/bridge/bridgeContext'
 import { HotkeyInput } from '@/components/settings/HotkeyInput'
 import { ModelCard } from '@/components/models/ModelCard'
@@ -60,7 +60,8 @@ function createBridge(overrides: Partial<Bridge> = {}): Bridge {
     startRecording: vi.fn(async () => undefined),
     stopRecording: vi.fn(async () => undefined),
     toggleRecording: vi.fn(async () => undefined),
-    checkForUpdates: vi.fn(async (): Promise<UpdateCheck> => ({ current: 'test' })),
+    pickExportFolder: vi.fn(async () => null),
+    retryResources: vi.fn(async () => undefined),
     getBackendStatus: vi.fn(async () => readyBackend),
     startBackend: vi.fn(async () => readyBackend),
     stopBackend: vi.fn(async () => readyBackend),
@@ -122,7 +123,7 @@ describe('UI polish fixes', () => {
     await user.click(fastOption!)
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
-    expect(bridge.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'Fast' }))
+    expect(bridge.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ model: 'Fast' }), { recover: true })
   })
 
   it('captures modifiers in hotkey input and replaces existing text', () => {
@@ -141,7 +142,7 @@ describe('UI polish fixes', () => {
     expect(onChange).toHaveBeenNthCalledWith(4, '')
   })
 
-  it('uses the four-action footer in the floating transcript popover preview', () => {
+  it('shows the four-action footer as a noninteractive preview', () => {
     render(
       <QuickHistoryPopoverPreview
         entries={[
@@ -153,10 +154,11 @@ describe('UI polish fixes', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /history/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /tray/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^close$/i })).toBeInTheDocument()
+    expect(screen.getByText('Settings')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument()
+    expect(screen.getByText('History')).toBeInTheDocument()
+    expect(screen.getByText('Tray')).toBeInTheDocument()
+    expect(screen.getByText('Close')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /close app/i })).not.toBeInTheDocument()
   })
 })

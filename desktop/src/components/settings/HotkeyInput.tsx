@@ -1,11 +1,12 @@
 import { Input } from '@/components/ui/input'
 import type { KeyboardEvent } from 'react'
 
-export function HotkeyInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function HotkeyInput({ value, onChange, disabled = false }: { value: string; onChange: (value: string) => void; disabled?: boolean }) {
   return (
     <Input
       id="hotkey"
       value={value}
+      disabled={disabled}
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={(event) => {
         const nextHotkey = hotkeyFromKeyboardEvent(event)
@@ -21,6 +22,7 @@ export function HotkeyInput({ value, onChange }: { value: string; onChange: (val
 }
 
 function hotkeyFromKeyboardEvent(event: KeyboardEvent<HTMLInputElement>): string | 'keep-current' | null {
+  if (event.key === 'Tab') return null
   if (event.key === 'Escape') return 'keep-current'
   if (event.key === 'Backspace' || event.key === 'Delete') return ''
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) return 'keep-current'
@@ -38,14 +40,12 @@ function hotkeyFromKeyboardEvent(event: KeyboardEvent<HTMLInputElement>): string
 }
 
 function normalizeKey(key: string): string {
-  if (key.length === 1) return key.toLowerCase()
-
   const aliases: Record<string, string> = {
-    ' ': 'space',
-    Spacebar: 'space',
-    Enter: 'enter',
-    Tab: 'tab',
+    ' ': '<space>', Spacebar: '<space>', Space: '<space>', Enter: '<enter>',
+    ArrowUp: '<up>', ArrowDown: '<down>', ArrowLeft: '<left>', ArrowRight: '<right>',
+    Home: '<home>', End: '<end>', PageUp: '<page_up>', PageDown: '<page_down>', Insert: '<insert>',
   }
-
-  return aliases[key] ?? ''
+  if (aliases[key]) return aliases[key]
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(key)) return `<${key.toLowerCase()}>`
+  return /^[a-z0-9]$/i.test(key) ? key.toLowerCase() : ''
 }

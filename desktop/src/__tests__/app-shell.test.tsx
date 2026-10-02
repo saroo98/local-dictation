@@ -13,8 +13,7 @@ describe('app shell', () => {
     for (const name of ['Recording', 'History', 'Models', 'Settings', 'Exports', 'Help/About']) {
       expect(nav.getByRole('button', { name })).toBeInTheDocument()
     }
-    expect(screen.getByText('Stage 5')).toBeInTheDocument()
-    expect(screen.getByText(/Tauri can use the packaged backend sidecar/i)).toBeInTheDocument()
+    expect(screen.getByText(/Offline speech recognition/i)).toBeInTheDocument()
 
     await user.click(nav.getByRole('button', { name: 'Models' }))
     expect(screen.getByRole('heading', { name: 'Models', level: 2 })).toBeInTheDocument()
@@ -23,6 +22,6 @@ describe('app shell', () => {
     expect(screen.getByRole('heading', { name: 'Settings', level: 2 })).toBeInTheDocument()
 
     await user.click(nav.getByRole('button', { name: 'Help/About' }))
-    expect(screen.getByText(/Stage 5 can start the packaged local backend sidecar/i)).toBeInTheDocument()
+    expect(screen.getByText(/The native app starts the packaged local backend/i)).toBeInTheDocument()
   })
 })

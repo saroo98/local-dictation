@@ -1,25 +1,23 @@
 import { Copy, History } from 'lucide-react'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { copyText } from '@/lib/clipboard'
+import { copyTranscript } from '@/lib/clipboard'
 
 export function TranscriptPreview({ text, onOpenHistory }: { text: string; onOpenHistory: () => void }) {
   async function copyLatest() {
-    await copyText(text)
-    toast.success('Copied transcript')
+    await copyTranscript(text)
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Latest transcript</CardTitle>
-        <CardDescription>Clipboard-safe mock output preview.</CardDescription>
+        <CardDescription>Your latest completed transcript.</CardDescription>
       </CardHeader>
       <CardContent>
         <p className="min-h-20 rounded-xl border border-border/70 bg-background p-4 text-sm leading-6 text-foreground">
-          {text || 'Start and stop the mock recording flow to generate a transcript.'}
+          {text || 'Start and stop recording to create a transcript.'}
         </p>
         <div className="mt-4 flex gap-2">
           <Button type="button" variant="outline" onClick={copyLatest} disabled={!text}>

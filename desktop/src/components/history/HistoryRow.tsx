@@ -1,9 +1,8 @@
 import { Copy } from 'lucide-react'
-import { toast } from 'sonner'
 
 import type { HistoryEntry } from '@/bridge/types'
 import { Button } from '@/components/ui/button'
-import { copyText } from '@/lib/clipboard'
+import { copyTranscript } from '@/lib/clipboard'
 import { formatTime } from '@/lib/time'
 
 export function HistoryRow({ entry }: { entry: HistoryEntry }) {
@@ -17,8 +16,7 @@ export function HistoryRow({ entry }: { entry: HistoryEntry }) {
         variant="outline"
         size="icon"
         onClick={() => {
-          void copyText(entry.text)
-          toast.success('Copied transcript')
+          void copyTranscript(entry.text)
         }}
       >
         <Copy className="h-4 w-4" />

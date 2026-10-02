@@ -1,25 +1,35 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { useBridge } from '@/bridge/bridgeContext'
+import { useBackendStatus } from '@/bridge/useBackendStatus'
 import { isTauriWindowRuntime, showBubbleWindow } from '@/tauri/windowControls'
 
 export function TauriBubbleController() {
   const bridge = useBridge()
+  const { backendStatus } = useBackendStatus()
+  const ready = backendStatus?.status === 'ready'
+  const restored = useRef(false)
 
   useEffect(() => {
-    if (!isTauriWindowRuntime()) return
+    if (!isTauriWindowRuntime() || !ready || restored.current) return
     let cancelled = false
-    void bridge.getSettings().then((settings) => {
-      if (!cancelled) {
-        void showBubbleWindow(settings.bubble_position)
+    let timer: number | undefined
+    async function restore() {
+      try {
+        const settings = await bridge.getSettings()
+        if (cancelled) return
+        await showBubbleWindow(settings.bubble_position)
+        if (!cancelled) restored.current = true
+      } catch {
+        if (!cancelled) timer = window.setTimeout(() => { void restore() }, 1000)
       }
-    }).catch(() => {
-      if (!cancelled) void showBubbleWindow(null)
-    })
+    }
+    void restore()
     return () => {
       cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [bridge])
+  }, [bridge, ready])
 
   return null
 }

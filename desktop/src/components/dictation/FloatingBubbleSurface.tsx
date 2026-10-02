@@ -2,6 +2,8 @@ import { AlertTriangle, Check, Clipboard, Ellipsis, Play, Square } from 'lucide-
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 
 import { useBridge } from '@/bridge/bridgeContext'
+import { useRuntimeState } from '@/bridge/useRuntimeState'
+import { toast } from 'sonner'
 import type { AppState } from '@/bridge/types'
 import { cn } from '@/lib/cn'
 import {
@@ -15,7 +17,7 @@ import {
 const iconClasses: Record<AppState['status'], string> = {
   idle: 'bg-primary text-primary-foreground',
   recording: 'bg-destructive text-destructive-foreground',
-  transcribing: 'bg-amber-500 text-white',
+  transcribing: 'bg-amber-500 text-amber-950',
   'paste-ready': 'bg-sky-600 text-white',
   error: 'bg-destructive text-destructive-foreground',
 }
@@ -31,76 +33,87 @@ function StateIcon({ status }: { status: AppState['status'] }) {
 
 export function FloatingBubbleSurface() {
   const bridge = useBridge()
-  const [state, setState] = useState<AppState | null>(null)
+  const { state } = useRuntimeState()
+  const [pending, setPending] = useState(false)
+  const actionPending = useRef(false)
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
   const dragStarted = useRef(false)
   const suppressNextClick = useRef(false)
-  const saveTimer = useRef<number | undefined>(undefined)
-  const status = state?.status ?? 'idle'
+  const runtimeState = useRef(state)
+  const status = state?.connected === false ? 'error' : state?.loading ? 'transcribing' : state?.status ?? 'idle'
+  const recordingDisabled = pending || !state || Boolean(state.loading || state.transcribing) || state.recording_ready === false || state.connected === false
 
-  useEffect(() => {
-    let mounted = true
-    void bridge.getState().then((next) => {
-      if (mounted) setState(next)
-    }).catch(() => {
-      if (mounted) {
-        setState({
-          recording: false,
-          transcribing: false,
-          waiting_for_target_click: false,
-          status: 'error',
-          latestTranscript: '',
-          activeModel: '',
-          activeLanguage: '',
-        })
-      }
-    })
-    const off = bridge.onState(setState)
-    return () => {
-      mounted = false
-      off()
-    }
-  }, [bridge])
+  useEffect(() => { runtimeState.current = state }, [state])
 
   useEffect(() => {
     let cancelled = false
     let unlisten: (() => void) | undefined
+    let latestPosition: TauriWindowPosition | null = null
+    let writing = false
+    let saveTimer: number | undefined
+
+    function schedule(delay: number) {
+      if (saveTimer !== undefined) window.clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(() => { saveTimer = undefined; void savePosition() }, delay)
+    }
+
+    async function savePosition() {
+      if (cancelled || writing || !latestPosition) return
+      const current = runtimeState.current
+      if (current?.connected === false || current?.loading || current?.settings_error) {
+        schedule(1000)
+        return
+      }
+      const position = latestPosition
+      writing = true
+      let failed = false
+      try {
+        await bridge.saveSettings({ bubble_position: position })
+        if (latestPosition === position) latestPosition = null
+      } catch {
+        // Retain the latest move until a busy or disconnected backend recovers.
+        failed = true
+      } finally {
+        writing = false
+        if (!cancelled && latestPosition) schedule(failed ? 1000 : 350)
+      }
+    }
 
     void watchCurrentWindowMoved((position: TauriWindowPosition) => {
       if (cancelled) return
-      if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
-      saveTimer.current = window.setTimeout(() => {
-        void bridge.getSettings().then((settings) => {
-          return bridge.saveSettings({
-            ...settings,
-            bubble_position: position,
-          })
-        }).catch(() => {
-          // Position persistence should never interrupt the floating control.
-        })
-      }, 350)
+      latestPosition = position
+      schedule(350)
     }).then((nextUnlisten) => {
       if (cancelled) {
         nextUnlisten()
       } else {
         unlisten = nextUnlisten
       }
-    })
+    }).catch(() => undefined)
 
     return () => {
       cancelled = true
-      if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
+      if (saveTimer !== undefined) window.clearTimeout(saveTimer)
       unlisten?.()
     }
   }, [bridge])
 
   async function toggleRecording() {
+    if (actionPending.current) return
+    if (recordingDisabled) {
+      if (state?.connected === false || state?.recording_ready === false) {
+        await showMainWindow('help').catch(() => undefined)
+      }
+      return
+    }
+    actionPending.current = true
+    setPending(true)
     try {
       await bridge.toggleRecording()
-      setState(await bridge.getState())
+      await bridge.getState()
     } catch {
-      await showMainWindow('help')
-    }
+      await showMainWindow('help').catch(() => toast.error('Could not open recovery controls'))
+    } finally { actionPending.current = false; setPending(false) }
   }
 
   async function showPopover(event: MouseEvent) {
@@ -108,7 +121,7 @@ export function FloatingBubbleSurface() {
     try {
       await showQuickPopoverWindow()
     } catch {
-      await showMainWindow('history')
+      await showMainWindow('history').catch(() => toast.error('Could not open history'))
     }
   }
 
@@ -156,6 +169,9 @@ export function FloatingBubbleSurface() {
       <button
         type="button"
         aria-label="Toggle recording"
+        aria-disabled={recordingDisabled}
+        aria-busy={pending || Boolean(state?.loading || state?.transcribing)}
+        title={state?.connection_error || state?.error || (state?.loading ? 'Loading recording resources' : state?.transcribing ? 'Transcribing' : state?.recording ? 'Stop recording' : 'Start recording. Right-click for history.')}
         onPointerDown={(event) => void beginDrag(event)}
         onPointerMove={(event) => void maybeDrag(event)}
         onPointerUp={endDrag}

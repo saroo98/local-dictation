@@ -1,0 +1,219 @@
+Local Dictation UI Council Issue Audit
+Date: 2026-06-15
+
+Scope
+Target outcome:
+Identify the visible issues in the current quick history popover and Settings window from the two screenshots, then converge on a practical issue list before any implementation.
+
+Domain:
+Local-only Windows dictation productivity app. The app should feel fast, quiet, small, premium, and accessible without becoming complicated.
+
+Evidence Reviewed
+- Screenshot 1: earlier quick-history reference; private source path omitted.
+- Screenshot 2: earlier settings reference; private source path omitted.
+- Current quick history config:
+  - QUICK_HISTORY_WIDTH = 440
+  - QUICK_HISTORY_HEIGHT = 320
+  - QUICK_HISTORY_POINTER_SIZE = 16
+- Current quick_history_layout():
+  - row_top = 28
+  - row_height = 73
+  - text_x = 34
+  - preview_line_chars = 29
+  - transcript_font_size = 15
+  - row_separator_offset = 70
+  - copy_x = 362
+  - button_width = 38
+  - footer_y = 264
+- Current settings_panel_layout():
+  - width = 600
+  - height = 520
+  - label_width = 16
+  - control_width = 26
+- Current Settings form code still packs row controls with controls.pack(side="right"), which creates a large empty middle band.
+
+Root Cause Investigation
+1. Quick popover text collision is not a random rendering artifact.
+   The screenshot shows the first transcript row wrapping into two lines and the divider crossing or sitting too close to the second line. The code uses character-count preview wrapping and fixed canvas y positions, not measured text width or measured font metrics. The layout test currently estimates line height, but the real Tk font metrics and Windows scaling can be larger than the estimate.
+
+2. Quick popover hierarchy is fighting itself.
+   The popover is compact, but text, timestamp, divider, copy button, and footer are all fixed to hard-coded coordinates. When a transcript needs two lines, the second timestamp begins visually too close to the previous row. This makes rows look stacked on top of each other rather than separated.
+
+3. Settings still looks like a constrained wireframe, not a premium compact dialog.
+   The size was reduced, but the internal layout was not rebalanced. Labels remain on the left, controls are forced to the far right, and the center becomes empty. This is caused by right-packed controls and full-width bordered section cards.
+
+4. Settings roughness comes from native Tk widget styling plus too many thin rectangular borders.
+   The comboboxes, buttons, section boxes, and close button use basic rectangular forms. The result reads as functional but not high-end. The current visual system depends on subtle color differences that are too close together, so the UI looks flat and brittle.
+
+Council First-Pass Review
+
+Domain/Product Expert
+Recommendation:
+The bubble history must prioritize speed and legibility over decorative fidelity. A user opens it for one reason: copy or inspect the last few transcriptions instantly.
+
+Main concern:
+The current first row is visually unreliable with real dictation text. Long natural speech will keep creating collision and ambiguity unless preview measurement becomes deterministic.
+
+Would reject:
+Any design that makes the popover larger again just to hide the wrapping problem. The app should stay compact.
+
+Principal UI/UX Designer
+Recommendation:
+Treat both surfaces as compact desktop utility panels, not mini web pages. Use one clear typographic scale, more deliberate row rhythm, softer borders, and less hard rectangular boxing.
+
+Main concern:
+The current UI has the right dark palette direction, but the details feel rough: harsh section boxes, tiny controls, cramped footer, weak icon contrast, and a tail that looks mechanically attached rather than physically connected.
+
+Would reject:
+Keeping the settings layout as a full-width form with controls pushed to the far right. That empty center space is the main reason it still feels huge.
+
+Principal Software Architect
+Recommendation:
+Move away from hand-tuned canvas constants where the content is variable. Either measure text with Tk font metrics before drawing, or enforce a stricter one-line plus fade/truncation strategy.
+
+Main concern:
+The layout tests currently use approximations, while real rendering uses Tk and Windows scaling. That mismatch lets tests pass while screenshots still show text/divider collisions.
+
+Would reject:
+More one-off y-coordinate tweaks without measuring actual text size or lowering allowed text density.
+
+QA/Security/Ops Lead
+Recommendation:
+Add screenshot or geometry regression checks for real rendered Tk windows if possible. At minimum, add tests based on Tk font measurements rather than character-count heuristics.
+
+Main concern:
+The visible issues are environment-sensitive. A font scale or DPI difference can re-break the layout even if constants pass unit tests.
+
+Would reject:
+Claiming the UI is fixed based only on current unit tests, because the screenshot already contradicts the safety of those tests.
+
+Wildcard Specialist: Premium Visual Systems Reviewer
+Why included:
+The user explicitly wants a luxury-minimal, high-end visual finish, not only functional correctness.
+
+Recommendation:
+Reduce the number of visible boxes and sharpen the hierarchy. The popover should feel like one object with rows inside it; Settings should feel like a compact command panel, not a grid of nested bordered rectangles.
+
+Main concern:
+The design uses many low-contrast, same-weight lines. Premium interfaces usually use fewer separators, better spacing, clearer shape language, and more confident alignment.
+
+Would reject:
+Trying to make native Tk controls look luxurious only by changing colors. The structure and spacing must change too.
+
+Cross-Correction Round
+
+Domain/Product -> UX:
+Do not over-polish the bubble panel at the cost of speed. The user should be able to recognize the last transcript and click copy in less than a second.
+
+UX -> Architecture:
+The architecture cannot keep treating layout as fixed numbers if the visual target depends on real text. Use measured text or stricter truncation so the design is reliable.
+
+Architecture -> QA/Ops:
+Unit tests should not only assert width and height. They need to assert rendered content boundaries using the same font metrics that Tk uses, otherwise screenshots will keep finding issues after tests pass.
+
+QA/Ops -> Domain/Product:
+Compactness must be defined with safe failure modes. If text is too long, the UI should degrade gracefully with one-line truncation, not overlap or push the next timestamp into the previous row.
+
+Visual Systems -> UX:
+The screenshots show too many equally important strokes. Keep only the lines that clarify rows or actions. Remove decorative borders that make the app feel like a prototype.
+
+UX -> Visual Systems:
+Premium cannot mean oversized. The app is a utility; the right direction is smaller, calmer, and more legible, not more cinematic.
+
+Final Verdict: Issue List
+
+Priority 1 - Functional visual defects
+1. Quick popover first-row text collides with the divider.
+   Evidence: Screenshot 1 shows the divider line running through or too close to the second line of the first transcript.
+   Likely root cause: fixed row y coordinates plus character-count preview wrapping instead of actual Tk font measurement.
+
+2. Quick popover row rhythm is too tight for two-line transcripts.
+   Evidence: The second timestamp visually starts inside the first row's text area.
+   Likely root cause: row height and separator position leave too little real rendered vertical space.
+
+3. Quick popover long text is not safely constrained before the copy button column.
+   Evidence: The first item feels cramped and clipped awkwardly.
+   Likely root cause: preview_line_chars is a rough character limit, not pixel-aware wrapping.
+
+Priority 2 - Layout quality problems
+4. Settings still feels too wide because controls are far right with a dead center.
+   Evidence: Screenshot 2 has a large empty horizontal band between labels and controls.
+   Likely root cause: row controls are packed with side="right" in build_settings_form().
+
+5. Settings looks rough because it has too many full-width rectangular section outlines.
+   Evidence: The form reads as stacked wireframe boxes.
+   Likely root cause: every section is a full-width bordered shell, with separators inside each card.
+
+6. Settings controls are too small and visually weak.
+   Evidence: Dropdowns, Info, Browse, hotkey field, and footer buttons look tiny relative to the panel.
+   Likely root cause: 8 pt control fonts and small paddings inside a still-wide 600 px window.
+
+7. The opacity slider is not premium enough.
+   Evidence: It looks like a thin native Tk slider with a small handle and weak contrast.
+   Likely root cause: native tk.Scale styling limitations and short track/handle contrast.
+
+Priority 3 - Premium finish problems
+8. Quick popover tail is still visually heavy and sharp.
+   Evidence: The bottom-right connector looks like a dark cutout triangle, not a soft pointer.
+   Likely root cause: hard polygon geometry and a visible panel border around the pointer.
+
+9. Green play bubble is visually detached from the popover.
+   Evidence: It sits below the pointer with a noticeable gap and does not feel integrated as one control surface.
+   Likely root cause: fixed geometry places the popover by pointer x, but not by a balanced relationship to the bubble center and vertical gap.
+
+10. Copy icons are too faint and too small.
+    Evidence: The icon buttons read as empty dark squares at first glance.
+    Likely root cause: small icon size, low contrast, and button background close to panel color.
+
+11. Close button in Settings feels like a default debug square.
+    Evidence: Top-right "x" is tiny and boxed harshly.
+    Likely root cause: simple Tk button with square frame and text "x" instead of a refined icon button.
+
+12. Settings footer is cramped and visually lower quality than the header.
+    Evidence: The footer buttons look like utilitarian rectangles and the primary action is small.
+    Likely root cause: small 8 pt buttons and tight bottom bar spacing.
+
+Synthesis
+Best option:
+Do one more focused UI pass, but make it measurement-driven. For the quick popover, choose reliable one-line truncation or real Tk font measurement. For Settings, change the form grid so labels and controls live in a compact two-column block instead of opposite edges.
+
+Why it wins:
+It directly addresses the screenshot defects without increasing complexity or changing dictation behavior.
+
+What was rejected:
+- Making the windows large again.
+- Adding more decorative glass/glow.
+- More arbitrary y-coordinate tweaking without measuring real text.
+- Keeping right-packed settings controls.
+
+Main tradeoff:
+The popover may show less transcript text per row, but it will be faster to scan and will not break visually.
+
+Remaining risk:
+Tk has limited native styling capability. There is a ceiling to how premium it can look without a custom-drawn canvas settings panel or a different UI toolkit. The practical next step should still stay in Tk unless the user decides the app needs a larger UI technology change.
+
+Implementation Direction If Approved
+1. Quick popover:
+   - Use single-line transcript previews or measure real text with tkinter.font.Font.measure().
+   - Keep timestamp above text but increase row separation.
+   - Move divider below measured text, not a constant guess.
+   - Increase copy icon contrast and slightly enlarge it.
+   - Make the tail shorter and softer, or draw it as a smaller notch.
+
+2. Settings:
+   - Reduce window to about 540-560 px wide and 460-500 px high only if controls are reflowed.
+   - Replace controls.pack(side="right") with a compact grid: label column, control column, optional action column.
+   - Reduce full-width section box harshness; use section headers and subtle dividers instead.
+   - Improve close button and footer actions with consistent icon sizing.
+   - Keep the drag binding fix.
+
+3. Tests:
+   - Add text measurement tests using Tk font metrics where available.
+   - Add settings grid tests that ensure controls start before the far-right edge.
+   - Keep compact bounds, but do not rely only on width and height.
+
+Final Decision
+- Decision: There are real remaining issues. The biggest issue is not just size; it is content measurement and form alignment.
+- Confidence: High for the listed visual defects, medium for exact root causes until a rendered Tk measurement test is added.
+- Blocking questions: None for an issue audit. A fix pass should confirm whether the user prefers one-line previews or measured two-line previews.
+- Next action: Implement a measurement-driven compact polish pass if approved.

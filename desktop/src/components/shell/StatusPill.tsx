@@ -1,7 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
-
-import { BackendStatusContext } from '@/bridge/BackendStatusContext'
-import { useBridge } from '@/bridge/bridgeContext'
+import { useRuntimeState } from '@/bridge/useRuntimeState'
 import type { AppState, BackendStatusKind } from '@/bridge/types'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/cn'
@@ -17,7 +14,7 @@ const labels: Record<AppState['status'], string> = {
 const statusClasses: Record<AppState['status'], string> = {
   idle: 'border border-border bg-secondary text-secondary-foreground shadow-sm',
   recording: 'border border-destructive/30 bg-destructive text-destructive-foreground shadow-sm',
-  transcribing: 'border border-primary/30 bg-primary/10 text-primary shadow-sm',
+  transcribing: 'border border-primary/30 bg-primary/10 text-foreground shadow-sm',
   'paste-ready': 'border border-primary/30 bg-primary text-primary-foreground shadow-sm',
   error: 'border border-destructive bg-destructive text-destructive-foreground shadow-sm',
 }
@@ -39,44 +36,9 @@ const backendClasses: Partial<Record<BackendStatusKind, string>> = {
 }
 
 export function StatusPill() {
-  const bridge = useBridge()
-  const backendContext = useContext(BackendStatusContext)
-  const backendStatus = backendContext?.backendStatus ?? null
-  const backendReady = !backendContext || backendStatus?.status === 'ready'
-  const [state, setState] = useState<AppState | null>(null)
+  const { state, backendStatus } = useRuntimeState()
 
-  useEffect(() => {
-    if (!backendReady) {
-      return
-    }
-
-    let mounted = true
-    void bridge
-      .getState()
-      .then((next) => {
-        if (mounted) setState(next)
-      })
-      .catch(() => {
-        if (mounted) {
-          setState({
-            recording: false,
-            transcribing: false,
-            waiting_for_target_click: false,
-            status: 'error',
-            latestTranscript: '',
-            activeModel: '',
-            activeLanguage: '',
-          })
-        }
-      })
-    const off = bridge.onState(setState)
-    return () => {
-      mounted = false
-      off()
-    }
-  }, [backendReady, bridge])
-
-  if (backendContext && backendStatus && backendStatus.status !== 'ready') {
+  if (backendStatus && backendStatus.status !== 'ready') {
     return (
       <Badge
         variant="secondary"
@@ -93,12 +55,14 @@ export function StatusPill() {
   return (
     <Badge
       variant="secondary"
+      role="status"
+      aria-live="polite"
       className={cn(
         'min-w-14 justify-center',
-        state ? statusClasses[state.status] : 'border border-border bg-secondary text-secondary-foreground',
+        state ? statusClasses[state.connected === false ? 'error' : state.status] : 'border border-border bg-secondary text-secondary-foreground',
       )}
     >
-      {state ? labels[state.status] : 'Loading'}
+      {state?.connected === false ? 'Disconnected' : state?.loading ? 'Loading' : state ? labels[state.status] : 'Loading'}
     </Badge>
   )
 }

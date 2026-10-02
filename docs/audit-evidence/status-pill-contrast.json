@@ -1,0 +1,48 @@
+{
+  "checked_on": "2026-10-02",
+  "evidence": "rendered mock transcribing pill with appearance asserted, transitions temporarily disabled for stable CSS measurement; alpha-composited ancestors on an sRGB canvas; no audio capture",
+  "results": [
+    {
+      "mode": "light",
+      "preset": "neutral",
+      "contrast": 14.18,
+      "color": "rgb(18, 22, 33)",
+      "background": "oklab(0.313758 -0.00126752 -0.0129908 / 0.1)"
+    },
+    {
+      "mode": "light",
+      "preset": "green",
+      "contrast": 14.93,
+      "color": "rgb(18, 22, 33)",
+      "background": "oklab(0.542195 -0.104116 0.0383993 / 0.1)"
+    },
+    {
+      "mode": "light",
+      "preset": "blue",
+      "contrast": 14.84,
+      "color": "rgb(18, 22, 33)",
+      "background": "oklab(0.532244 -0.0385942 -0.157801 / 0.1)"
+    },
+    {
+      "mode": "dark",
+      "preset": "neutral",
+      "contrast": 14.15,
+      "color": "rgb(243, 244, 247)",
+      "background": "oklab(0.920761 -0.00361535 -0.00900227 / 0.1)"
+    },
+    {
+      "mode": "dark",
+      "preset": "green",
+      "contrast": 14.9,
+      "color": "rgb(243, 244, 247)",
+      "background": "oklab(0.788671 -0.115888 0.0406804 / 0.1)"
+    },
+    {
+      "mode": "dark",
+      "preset": "blue",
+      "contrast": 15.14,
+      "color": "rgb(243, 244, 247)",
+      "background": "oklab(0.74765 -0.0429995 -0.117057 / 0.1)"
+    }
+  ]
+}

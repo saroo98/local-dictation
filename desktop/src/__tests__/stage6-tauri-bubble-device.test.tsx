@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { BackendStatusProvider } from '@/bridge/BackendStatusProvider'
 import { BridgeContext } from '@/bridge/bridgeContext'
 import { useBackendStatus } from '@/bridge/useBackendStatus'
-import type { AppState, BackendStatus, Bridge, Settings, UpdateCheck } from '@/bridge/types'
+import type { AppState, BackendStatus, Bridge, Settings } from '@/bridge/types'
 import { FloatingBubbleSurface } from '@/components/dictation/FloatingBubbleSurface'
 import { QuickHistoryPopoverSurface } from '@/components/dictation/QuickHistoryPopoverSurface'
 import { ModelCard } from '@/components/models/ModelCard'
@@ -35,6 +35,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: listenMock,
+  emit: vi.fn(async () => undefined),
 }))
 
 const defaultSettings: Settings = {
@@ -80,7 +81,7 @@ const starting: BackendStatus = {
 function createBridge(overrides: Partial<Bridge> = {}): Bridge {
   return {
     getSettings: vi.fn(async () => defaultSettings),
-    saveSettings: vi.fn(async (settings) => settings),
+    saveSettings: vi.fn(async (patch: Partial<Settings>) => ({ ...defaultSettings, ...patch })),
     getHistory: vi.fn(async () => [{ text: 'Recent transcript', created_at: '2026-06-16T11:39:00' }]),
     clearHistory: vi.fn(async () => undefined),
     exportHistory: vi.fn(async () => 'C:\\exports\\history.txt'),
@@ -94,7 +95,8 @@ function createBridge(overrides: Partial<Bridge> = {}): Bridge {
     startRecording: vi.fn(async () => undefined),
     stopRecording: vi.fn(async () => undefined),
     toggleRecording: vi.fn(async () => undefined),
-    checkForUpdates: vi.fn(async (): Promise<UpdateCheck> => ({ current: 'test' })),
+    pickExportFolder: vi.fn(async () => null),
+    retryResources: vi.fn(async () => undefined),
     getBackendStatus: vi.fn(async () => notRunning),
     startBackend: vi.fn(async () => starting),
     stopBackend: vi.fn(async () => notRunning),
@@ -149,7 +151,7 @@ describe('stage 6 device and Tauri surfaces', () => {
     await user.click(screen.getByRole('option', { name: /^CPU only$/i }))
     await user.click(screen.getByRole('button', { name: /save changes/i }))
 
-    expect(bridge.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ device_mode: 'cpu' }))
+    expect(bridge.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ device_mode: 'cpu' }), { recover: true })
   })
 
   it('shows model card names with size in parentheses', () => {

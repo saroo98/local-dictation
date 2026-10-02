@@ -105,11 +105,11 @@ describe('python bridge', () => {
     await expect(bridge.getHistory()).rejects.toThrow('Unknown command: nope')
 
     invokeMock.mockResolvedValueOnce('error')
-    await expect(bridge.getState()).rejects.toThrow('does not support the Stage 5 JSON bridge')
+    await expect(bridge.getState()).rejects.toThrow('bridge protocol is incompatible')
 
     invokeMock.mockReset()
     invokeMock.mockRejectedValueOnce(new Error('Connection refused'))
-    await expect(bridge.getState()).rejects.toThrow('Local Dictation is not running. Start the Python app first.')
+    await expect(bridge.getState()).rejects.toThrow('Local Dictation is not running. Start or retry the backend in Help/About.')
   })
 
   it('sends write and action requests through the Tauri bridge command', async () => {
@@ -172,11 +172,11 @@ describe('python bridge', () => {
       .mockResolvedValueOnce(JSON.stringify({ ok: true, data: recordingState }))
 
     const unsubscribe = bridge.onState(listener)
-    await vi.runOnlyPendingTimersAsync()
-    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(750)
 
     expect(listener).toHaveBeenCalledTimes(2)
-    expect(listener).toHaveBeenLastCalledWith(recordingState)
+    expect(listener).toHaveBeenLastCalledWith({ ...recordingState, connected: true, connection_error: undefined })
 
     unsubscribe()
     invokeMock.mockResolvedValue(JSON.stringify({ ok: true, data: { ...recordingState, latestTranscript: 'new' } }))

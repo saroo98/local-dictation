@@ -1,0 +1,7 @@
+{
+  "checked_on": "2026-10-02",
+  "evidence": "rendered mock bubble transcribing icon with transition disabled for stable CSS measurement; no audio capture",
+  "foreground": "oklch(0.279 0.077 45.635)",
+  "background": "oklch(0.769 0.188 70.08)",
+  "contrast": 7.03
+}

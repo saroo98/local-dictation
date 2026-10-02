@@ -3,7 +3,7 @@ import { AudioLines, ClipboardCheck, Loader2, MousePointerClick } from 'lucide-r
 import type { AppState } from '@/bridge/types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-export function RecordingStatusCard({ state }: { state: AppState | null }) {
+export function RecordingStatusCard({ state, mock = false }: { state: AppState | null; mock?: boolean }) {
   const status = state?.status ?? 'idle'
   const Icon =
     status === 'recording' ? AudioLines : status === 'transcribing' ? Loader2 : status === 'paste-ready' ? ClipboardCheck : MousePointerClick
@@ -11,17 +11,17 @@ export function RecordingStatusCard({ state }: { state: AppState | null }) {
   return (
     <Card className="ld-card-shadow">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle role="status" aria-live="polite" className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" strokeWidth={1.8} />
-          {status === 'paste-ready' ? 'Ready to paste' : status.charAt(0).toUpperCase() + status.slice(1)}
+          {state?.connected === false ? 'Disconnected' : state?.loading ? 'Loading resources' : !state ? 'Checking recording state' : status === 'paste-ready' ? 'Ready to paste' : status.charAt(0).toUpperCase() + status.slice(1)}
         </CardTitle>
         <CardDescription>
-          This is mock state only. The existing Python/Tkinter app still owns real recording.
+          {state?.connection_error || state?.error || (mock ? 'Browser preview uses simulated recording.' : 'Audio capture and transcription run locally.')}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-3 text-sm">
-        <Info label="Model" value={state?.activeModel ?? 'Balanced'} />
-        <Info label="Language" value={state?.activeLanguage ?? 'English (US)'} />
+        <Info label="Model" value={state?.activeModel || 'Unavailable'} />
+        <Info label="Language" value={state?.activeLanguage || 'Unavailable'} />
       </CardContent>
     </Card>
   )

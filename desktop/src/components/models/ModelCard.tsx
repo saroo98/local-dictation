@@ -10,17 +10,18 @@ interface ModelCardProps {
   onDownload: (tier: string) => void
   onCopyPath: (tier: string) => void
   onOpenFolder: (tier: string) => void
+  disabled?: boolean
 }
 
-export function ModelCard({ model, onDownload, onCopyPath, onOpenFolder }: ModelCardProps) {
+export function ModelCard({ model, onDownload, onCopyPath, onOpenFolder, disabled = false }: ModelCardProps) {
   const downloading = model.download_status === 'downloading'
   const downloadFailed = model.download_status === 'error'
   const downloadLabel = model.available ? 'Installed' : downloading ? 'Downloading...' : 'Download'
   const statusLabel = model.available ? 'Installed' : downloading ? 'Downloading' : downloadFailed ? 'Error' : 'Not installed'
   const statusClass = model.available
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 shadow-none'
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-none'
     : downloadFailed
-      ? 'border-destructive/30 bg-destructive/10 text-destructive shadow-none'
+      ? 'border-destructive/30 bg-destructive/10 text-destructive dark:text-red-300 shadow-none'
       : 'border-border bg-secondary text-secondary-foreground shadow-none'
 
   return (
@@ -46,16 +47,17 @@ export function ModelCard({ model, onDownload, onCopyPath, onOpenFolder }: Model
           <p className="mt-1 truncate">{model.cache_dir}</p>
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={model.available || downloading} onClick={() => onDownload(model.tier)}>
+          <Button type="button" variant="outline" size="sm" disabled={disabled || model.available || downloading} onClick={() => onDownload(model.tier)}>
             <Download className="h-3.5 w-3.5" /> {downloadLabel}
           </Button>
-          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenFolder(model.tier)}>
+          <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={() => onOpenFolder(model.tier)}>
             <FolderOpen className="h-3.5 w-3.5" /> Open folder
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="sm"
+            disabled={disabled}
             onClick={() => {
               onCopyPath(model.tier)
             }}

@@ -16,7 +16,7 @@ export function TopBar({ title }: { title: string }) {
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border/70 bg-background/88 px-6 backdrop-blur">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-        <p className="text-xs text-muted-foreground">Offline-first desktop UI preview</p>
+        <p className="text-xs text-muted-foreground">{getBridgeRuntimeLabel() === 'Local bridge' ? 'Local speech recognition' : 'Browser preview with simulated data'}</p>
       </div>
       <div className="flex items-center gap-3">
         <StatusPill />

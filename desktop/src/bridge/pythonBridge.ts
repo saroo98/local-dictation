@@ -1,4 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 import type {
   AppState,
@@ -11,7 +12,6 @@ import type {
   ModelInfo,
   ModelOrder,
   Settings,
-  UpdateCheck,
 } from '@/bridge/types'
 
 interface BridgeResponse<T> {
@@ -20,9 +20,9 @@ interface BridgeResponse<T> {
   error?: string
 }
 
-const localBridgeUnavailableMessage = 'Local Dictation is not running. Start the Python app first.'
+const localBridgeUnavailableMessage = 'Local Dictation is not running. Start or retry the backend in Help/About.'
 const incompatibleLocalBridgeMessage =
-  'Local Dictation is running, but it does not support the Stage 5 JSON bridge. Close the old Python app, then start the backend from this Tauri build.'
+  'Local Dictation is running, but its bridge protocol is incompatible. Close the old Python app, then start the backend from this build.'
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -81,18 +81,113 @@ async function callTauri<T>(command: string): Promise<T> {
 }
 
 export function createPythonBridge(): Bridge {
+  const listeners = new Set<(state: AppState) => void>()
+  let lastState: AppState | undefined
+  let previous = ''
+  let inFlight: Promise<AppState> | undefined
+  let timer: number | undefined
+  let polling = false
+  let generation = 0
+  let stateVersion = 0
+  let nativeVisible: boolean | undefined
+  let visibilityVersion = 0
+  let unlistenVisibility: (() => void) | undefined
+
+  function publish(state: AppState) {
+    lastState = state
+    const serialized = JSON.stringify(state)
+    if (serialized === previous) return
+    previous = serialized
+    listeners.forEach((listener) => listener(state))
+  }
+
+  function readState(): Promise<AppState> {
+    if (inFlight) return inFlight
+    const version = stateVersion
+    inFlight = callPython<AppState>('get-state').then((next) => {
+      const state = { ...next, connected: true, connection_error: undefined }
+      if (version === stateVersion) publish(state)
+      return state
+    }).catch((error: unknown) => {
+      if (version === stateVersion) {
+        publish({
+          recording: false, transcribing: false, waiting_for_target_click: false,
+          status: 'idle', latestTranscript: '', activeModel: '', activeLanguage: '',
+          ...lastState, connected: false, connection_error: errorMessage(error),
+        })
+      }
+      throw error
+    }).finally(() => { inFlight = undefined })
+    return inFlight
+  }
+
+  function visible() {
+    return nativeVisible ?? !document.hidden
+  }
+
+  async function poll() {
+    if (polling || listeners.size === 0 || !visible()) return
+    polling = true
+    const currentGeneration = generation
+    const version = stateVersion
+    try { await readState() } catch { /* Connection failure is published separately. */ }
+    finally { polling = false }
+    if (currentGeneration !== generation) { refreshVisibleState(); return }
+    if (currentGeneration === generation && listeners.size > 0 && visible()) {
+      timer = window.setTimeout(() => { timer = undefined; void poll() }, version === stateVersion ? 750 : 0)
+    }
+  }
+
+  function refreshVisibleState() {
+    if (timer !== undefined) window.clearTimeout(timer)
+    timer = undefined
+    if (visible()) void poll()
+  }
+
+  function visibilityChanged() { refreshVisibleState() }
+
+  async function startPolling() {
+    const currentGeneration = generation
+    document.addEventListener('visibilitychange', visibilityChanged)
+    if (isTauri()) {
+      try {
+        const off = await listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
+          visibilityVersion += 1
+          nativeVisible = payload
+          refreshVisibleState()
+        })
+        if (currentGeneration !== generation) { off(); return }
+        unlistenVisibility = off
+        const version = visibilityVersion
+        const initial = await callTauri<boolean>('current_window_visible')
+        if (currentGeneration !== generation || version !== visibilityVersion) return
+        if (typeof initial === 'boolean') nativeVisible = initial
+      } catch { /* DOM visibility still works if native visibility is unavailable. */ }
+    }
+    if (currentGeneration === generation) refreshVisibleState()
+  }
+
+  async function action<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
+    stateVersion += 1
+    try { return await callPython<T>(cmd, args) }
+    finally { stateVersion += 1; refreshVisibleState() }
+  }
+
   return {
     getSettings() {
       return callPython<Settings>('get-settings')
     },
-    saveSettings(settings) {
-      return callPython<Settings>('set-settings', { settings })
+    saveSettings(settings, options) {
+      return action<Settings>('set-settings', { settings, ...(options?.recover ? { recover: true } : {}) })
+    },
+    pickExportFolder() {
+      return callTauri<string | null>('pick_export_folder')
     },
     getHistory() {
       return callPython<HistoryEntry[]>('get-history')
     },
     clearHistory() {
-      return callPython<HistoryEntry[]>('clear-history').then(() => undefined)
+      return action<HistoryEntry[]>('clear-history').then(() => undefined)
     },
     exportHistory(format) {
       return callPython<string>('export-history', { format })
@@ -110,49 +205,42 @@ export function createPythonBridge(): Bridge {
       return callPython<string>('copy-model-path', { choice }).then(() => undefined)
     },
     addCustomModel(name, source) {
-      return callPython<Settings>('add-custom-model', { name, source }).then(() => undefined)
+      return action<Settings>('add-custom-model', { name, source }).then(() => undefined)
     },
-    getState() {
-      return callPython<AppState>('get-state')
+    async getState() {
+      for (;;) {
+        const version = stateVersion
+        const next = await readState()
+        if (version === stateVersion) return next
+      }
     },
     onState(callback) {
-      let disposed = false
-      let previous = ''
-
-      async function poll() {
-        try {
-          const state = await callPython<AppState>('get-state')
-          if (disposed) return
-          const serialized = JSON.stringify(state)
-          if (serialized !== previous) {
-            previous = serialized
-            callback(state)
-          }
-        } catch {
-          // Polling should not surface repeated background errors; direct actions still throw.
-        }
-      }
-
-      const interval = window.setInterval(() => {
-        void poll()
-      }, 750)
-
+      listeners.add(callback)
+      if (lastState) callback(lastState)
+      if (listeners.size === 1) { generation += 1; void startPolling() }
       return () => {
-        disposed = true
-        window.clearInterval(interval)
+        listeners.delete(callback)
+        if (listeners.size === 0) {
+          generation += 1
+          if (timer !== undefined) window.clearTimeout(timer)
+          timer = undefined
+          unlistenVisibility?.()
+          unlistenVisibility = undefined
+          document.removeEventListener('visibilitychange', visibilityChanged)
+        }
       }
     },
     startRecording() {
-      return callPython<{ accepted: boolean }>('start-recording').then(() => undefined)
+      return action<{ accepted: boolean }>('start-recording').then(() => undefined)
     },
     stopRecording() {
-      return callPython<{ accepted: boolean }>('stop-recording').then(() => undefined)
+      return action<{ accepted: boolean }>('stop-recording').then(() => undefined)
     },
     toggleRecording() {
-      return callPython<{ accepted: boolean }>('toggle-recording').then(() => undefined)
+      return action<{ accepted: boolean }>('toggle-recording').then(() => undefined)
     },
-    checkForUpdates(): Promise<UpdateCheck> {
-      return Promise.reject(new Error('Update checks are not available in Stage 3.'))
+    retryResources() {
+      return action<{ accepted: boolean }>('retry-resources').then(() => undefined)
     },
     getBackendStatus() {
       return callTauri<BackendStatus>('backend_status')

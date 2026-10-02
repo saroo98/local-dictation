@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { Copy, Download, History, Settings, X } from 'lucide-react'
-import { toast } from 'sonner'
 
 import type { HistoryEntry } from '@/bridge/types'
 import { Button } from '@/components/ui/button'
-import { copyText } from '@/lib/clipboard'
+import { copyTranscript } from '@/lib/clipboard'
 import { truncateText } from '@/lib/format'
 import { formatTime } from '@/lib/time'
 
@@ -25,8 +24,7 @@ export function QuickHistoryPopoverPreview({ entries }: { entries: HistoryEntry[
               variant="outline"
               className="size-8 self-center border-border/70 bg-background/60 text-muted-foreground shadow-none hover:bg-accent hover:text-foreground"
               onClick={() => {
-                void copyText(entry.text)
-                toast.success('Copied transcript')
+                void copyTranscript(entry.text)
               }}
             >
               <Copy className="h-3.5 w-3.5" />
@@ -48,9 +46,9 @@ export function QuickHistoryPopoverPreview({ entries }: { entries: HistoryEntry[
 
 function FooterItem({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <button type="button" className="flex min-w-0 items-center justify-center gap-1.5 px-1.5 py-1.5 text-muted-foreground transition hover:text-foreground">
+    <span className="flex min-w-0 items-center justify-center gap-1.5 px-1.5 py-1.5 text-muted-foreground">
       <span className="[&_svg]:size-3.5">{icon}</span>
       <span className="truncate">{label}</span>
-    </button>
+    </span>
   )
 }

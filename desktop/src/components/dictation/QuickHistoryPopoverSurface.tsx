@@ -1,12 +1,13 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Copy, Download, History, Settings, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { listen } from '@tauri-apps/api/event'
 
 import { useBridge } from '@/bridge/bridgeContext'
+import { useRuntimeState } from '@/bridge/useRuntimeState'
 import type { HistoryEntry } from '@/bridge/types'
 import { Button } from '@/components/ui/button'
-import { copyText } from '@/lib/clipboard'
+import { copyTranscript } from '@/lib/clipboard'
 import { truncateText } from '@/lib/format'
 import { formatTime } from '@/lib/time'
 import { hideAppToTray, hideQuickPopoverWindow, showMainWindow } from '@/tauri/windowControls'
@@ -17,27 +18,34 @@ interface PopoverPlacementEvent {
 
 export function QuickHistoryPopoverSurface() {
   const bridge = useBridge()
+  const { state } = useRuntimeState()
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [tailX, setTailX] = useState(340)
+  const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const readId = useRef(0)
+  const historyRevision = state?.history_revision ?? 0
+
+  const refresh = useCallback(() => {
+    const id = ++readId.current
+    return bridge.getHistory().then((next) => {
+      if (id === readId.current) { setEntries(next); setError(null); setLoaded(true) }
+    }).catch((cause: unknown) => {
+      if (id === readId.current) setError(cause instanceof Error ? cause.message : 'Could not load history')
+    })
+  }, [bridge])
 
   useEffect(() => {
-    let mounted = true
-    void bridge.getHistory().then((next) => {
-      if (mounted) setEntries(next)
-    }).catch(() => {
-      if (mounted) setEntries([])
-    })
-    return () => {
-      mounted = false
-    }
-  }, [bridge])
+    void refresh()
+    return () => { readId.current += 1 }
+  }, [historyRevision, refresh])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
     let cancelled = false
 
     void listen<PopoverPlacementEvent>('local-dictation:popover-placement', ({ payload }) => {
-      if (!cancelled) setTailX(payload.tail_x)
+      if (!cancelled) { setTailX(payload.tail_x); void refresh() }
     }).then((nextUnlisten) => {
       if (cancelled) {
         nextUnlisten()
@@ -52,24 +60,21 @@ export function QuickHistoryPopoverSurface() {
       cancelled = true
       unlisten?.()
     }
-  }, [])
-
-  async function copyTranscript(text: string) {
-    await copyText(text)
-    toast.success('Copied transcript')
-  }
+  }, [refresh])
 
   async function openRoute(route: string) {
-    await showMainWindow(route)
-    await hideQuickPopoverWindow()
+    try { await showMainWindow(route); await hideQuickPopoverWindow() }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not open the app') }
   }
 
   async function hideToTray() {
-    await hideAppToTray()
+    try { await hideAppToTray() }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not hide to the tray') }
   }
 
   async function closePopover() {
-    await hideQuickPopoverWindow()
+    try { await hideQuickPopoverWindow() }
+    catch (cause) { toast.error(cause instanceof Error ? cause.message : 'Could not close the popover') }
   }
 
   return (
@@ -94,9 +99,10 @@ export function QuickHistoryPopoverSurface() {
               </Button>
             </div>
           ))}
-          {entries.length === 0 ? (
+          {error ? <div role="alert" className="flex items-center gap-2 text-xs"><p className="text-destructive">{error}</p><Button size="sm" variant="outline" onClick={() => void refresh()}>Retry</Button></div> : null}
+          {entries.length === 0 && !error ? (
             <div className="grid min-h-28 place-items-center rounded-xl border border-dashed border-border/70 text-sm text-muted-foreground">
-              No recent transcripts yet
+              {loaded ? 'No recent transcripts yet' : 'Loading history...'}
             </div>
           ) : null}
         </div>
