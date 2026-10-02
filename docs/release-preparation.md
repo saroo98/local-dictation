@@ -22,8 +22,9 @@ Confirmed findings:
   installation paths and relative repository links.
 - Audit records included unnecessary process/window identities, unrelated
   foreground diagnostics and personal file sizes/timestamps. Public records
-  now omit these details and identify their redactions. Original records remain
-  only in ignored local build output, outside publishable source.
+  now omit these details and identify their redactions. Separate raw copies
+  are retained in ignored local build output. Original records in earlier Git
+  versions are covered by the historical privacy gate below.
 - Private chat names and original screenshot/archive locations were removed
   from public notes. Application data defaults remain documented accurately.
 - Existing Git author/committer metadata contains a personal email address.

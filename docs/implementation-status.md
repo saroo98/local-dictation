@@ -8,10 +8,10 @@ preparing a logo. Push and release publication are on hold.
 
 | Step | State | Evidence |
 | --- | --- | --- |
-| Review tracked files and Git history for private content | complete | All 170 tracked files, 345 reachable blobs and commit metadata scanned; three unique images inspected; personal paths and non-public author email require cleanup |
+| Review tracked files and Git history for private content | complete | Baseline 170 tracked files, 345 reachable blobs and commit metadata scanned; three unique images inspected; personal paths and personal author email identified |
 | Remove private machine details from current files | complete | Synthetic fixtures, relative links and redacted evidence; raw records preserved only in ignored output |
 | Update the public README | complete | Version 0.1.1, voice typing/Whisper description, user workflow, model setup, privacy and build instructions |
-| Validate and commit locally | in progress | Python 123 and frontend 12 targeted tests pass; lint/typecheck, 229 document links and all 22 JSON evidence files pass; staged scan and commits remain |
+| Validate and commit locally | complete | Privacy cleanup committed as `7e500a4`; README and final status included in the documentation commit. Python 123 and frontend 12 targeted tests, lint/typecheck, 229 document links, 22 JSON files and staged privacy checks pass |
 | Push and publish an installer | on hold | Owner is preparing a logo; historical privacy findings must also be resolved before publication |
 
 Plan: `docs/implementation-plan.md`. Baseline: `462ce340` plus the preserved,

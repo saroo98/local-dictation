@@ -9,8 +9,10 @@ timestamps, process/window identifiers and unrelated foreground diagnostics.
 Affected JSON records list their `privacy_redactions`. `<repository>` means
 the source root; `%LOCALAPPDATA%`, `%APPDATA%` and `%USERPROFILE%` are portable
 Windows path descriptions. These are sanitized reports of the original checks,
-not fresh test runs. Original records are retained only in ignored local build
-output and must not be packaged or published.
+not fresh test runs. Separate full copies are retained in ignored local build
+output and must not be packaged or published. Original records in older Git
+versions remain subject to the historical privacy gate described in
+`../release-preparation.md`.
 
 - `cleanup-manifest.json`: source moves, preserved archive and compatibility scope.
 - `validation.json`: checks actually run, browser measurements and the native compiler memory blocker.
