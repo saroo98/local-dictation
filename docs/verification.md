@@ -5,8 +5,14 @@ Checked on 2026-10-02 in `<repository>`, on the local
 changes and installing the app. Source commit
 `5cccd1cd88dd80bd6c58e17df546aa33e005641b` includes the cleanup and reliability
 fixes, and the rebuilt app now replaces the June per-user installation. Native
-version remains 0.1.0; no new release was published.
+version for that initial upgrade was 0.1.0; no release was published.
 [The original audit](audit.md) describes baseline `462ce340`.
+
+The subsequent reported bubble/Alt+A defects were corrected and the installed
+app updated to 0.1.1. [The follow-up verification](bubble-shortcut-fix.md)
+records fresh 192 Python, 85 frontend and 21 native passing tests, installation
+identity checks and ready normal-profile CUDA startup. The original artifact
+identities and counts below are retained as evidence of the first upgrade.
 
 ## What changed
 

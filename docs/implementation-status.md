@@ -25,7 +25,22 @@ scope. Publishing and pushing are not requested.
 | Install rebuilt app | complete | Verified NSIS installer exited 0 and updated the existing per-user installation |
 | Verify installed files and startup | complete | Installed binary/CUDA identities, isolated native startup/job exit and passive bubble checks pass; settings/history content unchanged |
 
-## Implementation tasks
+## Reported bubble and shortcut follow-up
+
+On 2026-10-02 the owner reported a bubble stuck at Transcribing while Alt+A
+continued recording and pasting, plus intermittent shortcut response.
+Read-only inspection of the running installed backend confirmed idle,
+transcribing false, resources ready and the saved `<alt>+a` shortcut.
+
+| Step | State | Evidence |
+| --- | --- | --- |
+| Reproduce stale bubble and shortcut dispatch failures | complete | Three frontend regressions reproduce a frozen busy bubble, foreign-window wakeup and stopped availability polling; a busy-Tk regression proves the keyboard callback blocks |
+| Apply minimal fixes and targeted regressions | complete | Targeted frontend 29 and Python 27 pass; repeated Alt+A key sequences dispatch exactly once per chord without calling Tk from the hook thread |
+| Run affected checks and package the update | complete | Python 192, frontend 85, native 21, lint/typecheck/fmt and production GPU NSIS build pass; actual hidden Tk dispatch also passes |
+| Verify and update the installed app | complete | Installed 0.1.1 files/resources and native-owned startup/exit pass; normal CUDA profile is ready and left running with unchanged settings/history. Physical interactions remain unverified |
+| Review and commit the fix | complete | Reviewed source/tests and installed verification; fix committed locally as `103f6e5`. No push or publication |
+
+## Original implementation tasks
 
 | Task | State | Evidence |
 | --- | --- | --- |
