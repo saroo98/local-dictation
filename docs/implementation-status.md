@@ -1,5 +1,19 @@
 # Implementation status
 
+## Public release preparation
+
+The owner requested meaningful commits, README improvements and a privacy
+review on 2026-10-02, then explicitly limited this phase to local commits while
+preparing a logo. Push and release publication are on hold.
+
+| Step | State | Evidence |
+| --- | --- | --- |
+| Review tracked files and Git history for private content | complete | All 170 tracked files, 345 reachable blobs and commit metadata scanned; three unique images inspected; personal paths and non-public author email require cleanup |
+| Remove private machine details from current files | complete | Synthetic fixtures, relative links and redacted evidence; raw records preserved only in ignored output |
+| Update the public README | complete | Version 0.1.1, voice typing/Whisper description, user workflow, model setup, privacy and build instructions |
+| Validate and commit locally | in progress | Python 123 and frontend 12 targeted tests pass; lint/typecheck, 229 document links and all 22 JSON evidence files pass; staged scan and commits remain |
+| Push and publish an installer | on hold | Owner is preparing a logo; historical privacy findings must also be resolved before publication |
+
 Plan: `docs/implementation-plan.md`. Baseline: `462ce340` plus the preserved,
 uncommitted repository cleanup. Work is local on `reliability-fixes`.
 
@@ -10,13 +24,14 @@ bug-free software is made.
 All available implementation, build and repository checks are complete.
 Interactive and clean-machine acceptance remain unverified, as recorded in
 [verification.md](verification.md). The owner requested completion of the
-available checks while another foreground application retained foreground.
+available checks while another application retained foreground.
 
 ## Commit and installation follow-up
 
 On 2026-10-02 the owner explicitly requested committing all project changes and
-installing the rebuilt app. This supersedes the earlier local-only/no-install
-scope. Publishing and pushing are not requested.
+installing the rebuilt app. This superseded the earlier local-only/no-install
+scope. At that phase publishing and pushing were not requested; the current
+release-preparation scope above explicitly holds both actions.
 
 | Step | State | Evidence |
 | --- | --- | --- |
@@ -142,7 +157,7 @@ the new clicked-point keyword arguments and asserts their exact propagation.
 Frontend corruption recovery, stale reads and position retries now pass 29
 targeted tests after three observed failures. Explicit Save permits recovery;
 automatic position saves retain pending moves and never permit corruption recovery.
-The owner chose to finish available checks while another foreground application retains foreground;
+The owner chose to finish available checks while another application retained foreground;
 actual native pointer acceptance remains unavailable. A passive check found a
 136 by 56 client area for the configured 56 by 56 bubble. A resize after creation
 was implemented; later passive checks measured the corrected size. Independent backends now

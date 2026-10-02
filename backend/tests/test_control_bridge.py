@@ -18,10 +18,10 @@ class FakeControlActions:
             "backend_owner": "api",
             "shutdown_backend": {"accepted": True},
             "clear_history": [],
-            "export_history": "%USERPROFILE%\\Documents\\history.txt",
+            "export_history": "C:\\dictation-test-profile\\Documents\\history.txt",
             "download_model": {"choice": "Fast", "status": "downloading"},
-            "open_model_folder": "%USERPROFILE%\\.cache\\huggingface\\hub",
-            "copy_model_path": "%USERPROFILE%\\.cache\\huggingface\\hub",
+            "open_model_folder": "C:\\dictation-test-profile\\.cache\\huggingface\\hub",
+            "copy_model_path": "C:\\dictation-test-profile\\.cache\\huggingface\\hub",
             "add_custom_model": {"custom_models": []},
         }
 

@@ -11,7 +11,7 @@ of the implemented working tree.
 
 ## Outcome and current version
 
-The final active source folder is **<repository>**. Native app version is **0.1.0**; the private frontend package uses 0.0.0. Local master is 11 commits ahead of the verified GitHub master `bf3fa3c`, with no newer remote commit found. HEAD is dated 2026-07-13. The installed June app was not replaced and should not be treated as the rebuilt source.
+The final active source folder is the repository root. At this baseline audit, the native app version was **0.1.0**; the private frontend package used 0.0.0. Local master was 11 commits ahead of the verified GitHub master `bf3fa3c`, with no newer remote commit found. HEAD was dated 2026-07-13. The installed June app had not been replaced and should not be treated as the rebuilt source. Current version and installed checks are recorded in [verification.md](verification.md).
 
 | Recent commit | Change |
 | --- | --- |
@@ -44,7 +44,7 @@ local-dictation/
   README.md
 ```
 
-The duplicate Tauri checkout, earlier local data copies, prototype files and stale build cache were preserved outside active Projects at **<private-archive>**. A complete pre-cleanup Git-directory backup is there. Main worktree registration is now the single canonical source; archived copies are recovery material. Normal ignored dependencies/build output remain generated and reproducible, rather than source.
+The duplicate Tauri checkout, earlier local data copies, prototype files and stale build cache were preserved in a private archive outside the source folder. A complete pre-cleanup Git-directory backup was retained there. Main worktree registration is now the single canonical source; archived copies are recovery material. Normal ignored dependencies/build output remain generated and reproducible, rather than source.
 
 Python modules/tests and Windows tools were grouped without renaming their established APIs. Launch/build scripts derive source paths from this repository; Rust debug fallback uses `backend/bubble_dictate.py` and the root `.venv`. The shell log action now resolves the existing runtime log. Historical notes are explicitly historical.
 
@@ -54,7 +54,7 @@ Actual runtime settings/history remain at **C:\\local-dictation**. They were not
 
 The review covers Python runtime/settings/router, recording/inference/paste scheduling, persistence, model management/offline paths, Rust lifecycle/windows/proxy/capabilities, React pages/components/bridge/themes/mocks, tests, build/dependency configuration, recent/all Git refs, both source copies, runtime metadata and relevant error logs. No CI workflow exists in the reviewed tree.
 
-Earlier project chats were reviewed as dated context: **Check model compatibility**, **Redesign and add save button**, and **Refactor dictation bubble app**. Their older source paths and successful installer claims are historical, not fresh verification. Current source and checks take precedence. Generated design references are not alternative implementations. Local thread metadata showed these project chats plus this audit's agents; it did not reveal another newer source checkout.
+Earlier project chats were reviewed as dated context. Their older source paths and successful installer claims are historical, not fresh verification. Current source and checks take precedence. Generated design references are not alternative implementations. No newer source checkout was found in the reviewed project context. Private chat names and local archive paths are omitted from this public report.
 
 Evidence labels are deliberate:
 

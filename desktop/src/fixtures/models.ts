@@ -1,6 +1,7 @@
 import type { ModelInfo } from '@/bridge/types'
 
-const cacheDir = '%USERPROFILE%\\.cache\\huggingface\\hub'
+// Synthetic browser preview path, independent of any developer's profile.
+const cacheDir = 'C:\\LocalDictationDemo\\Cache\\huggingface\\hub'
 
 export const modelFixtures: ModelInfo[] = [
   {

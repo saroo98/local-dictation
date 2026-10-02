@@ -62,7 +62,7 @@ describe('python bridge', () => {
             model_name: 'large-v3',
             repo_id: 'Systran/faster-whisper-large-v3',
             description: 'best quality, slower',
-            cache_dir: '%USERPROFILE%\\.cache\\huggingface\\hub',
+            cache_dir: 'C:\\dictation-test-profile\\.cache\\huggingface\\hub',
             available: true,
             revision: 'abc123',
             size_bytes: 1024,

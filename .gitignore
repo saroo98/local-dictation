@@ -17,3 +17,19 @@ desktop/src-tauri/gen/
 desktop/src-tauri/binaries/
 build/
 .claude/
+.codex/
+
+# Local credentials and private signing material.
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local model downloads and transcript exports.
+/models/
+/model-cache/
+/exports/

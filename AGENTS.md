@@ -24,6 +24,11 @@ libraries; do not split the legacy runtime or introduce infrastructure merely
 to make an audit appear organized. Keep dependencies, generated output, logs,
 settings and transcript history out of tracked source.
 
+Review staged files and the entire publication history for private content.
+Use the repository's public GitHub noreply commit identity. Raw machine-specific
+audit records belong only in ignored local output; public evidence must identify
+its redactions. See `docs/release-preparation.md` before publishing.
+
 Do not run shortcut installation, app installation, real recording, model
 downloads, publication or Git commits as incidental validation. Verify native
 user-facing fixes in the app when focus, windows, audio, hotkeys or ownership

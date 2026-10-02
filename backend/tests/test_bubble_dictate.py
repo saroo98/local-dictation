@@ -660,9 +660,9 @@ class ShortcutSpecTests(unittest.TestCase):
     def test_build_shortcut_specs_returns_expected_shortcuts(self) -> None:
         specs = bubble_dictate.build_shortcut_specs(
             project_dir=Path(r"C:\local-dictation"),
-            desktop_dir=Path(r"%USERPROFILE%\Desktop"),
-            programs_dir=Path(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),
-            startup_dir=Path(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"),
+            desktop_dir=Path(r"C:\dictation-test-profile\Desktop"),
+            programs_dir=Path(r"C:\dictation-test-profile\AppData\Roaming\Microsoft\Windows\Start Menu\Programs"),
+            startup_dir=Path(r"C:\dictation-test-profile\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"),
             pythonw_path=Path(r"C:\local-dictation\.venv\Scripts\pythonw.exe"),
         )
 
@@ -670,7 +670,7 @@ class ShortcutSpecTests(unittest.TestCase):
 
         self.assertEqual(
             by_name["desktop-toggle"].shortcut_path,
-            Path(r"%USERPROFILE%\Desktop\Local Dictation Toggle.lnk"),
+            Path(r"C:\dictation-test-profile\Desktop\Local Dictation Toggle.lnk"),
         )
         self.assertEqual(
             by_name["desktop-toggle"].arguments,
