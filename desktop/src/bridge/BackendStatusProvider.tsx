@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { watchCurrentWindowVisibility } from '@/tauri/windowControls'
 
 import { isTauriRuntime } from '@/bridge'
 import { BackendStatusContext } from '@/bridge/BackendStatusContext'
@@ -133,9 +133,9 @@ export function BackendStatusProvider({
     }
     document.addEventListener('visibilitychange', refreshWhenVisible)
     if (isTauriRuntime()) {
-      void listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
+      void watchCurrentWindowVisibility((visible) => {
         visibilityVersion += 1
-        nativeVisible = payload
+        nativeVisible = visible
         refreshWhenVisible()
       }).then(async (off) => {
         if (cancelled) { off(); return }

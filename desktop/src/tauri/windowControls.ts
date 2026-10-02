@@ -56,3 +56,11 @@ export async function watchCurrentWindowMoved(onMoved: (position: TauriWindowPos
     onMoved([payload.x, payload.y])
   })
 }
+
+export async function watchCurrentWindowVisibility(onVisible: (visible: boolean) => void) {
+  if (!isTauriWindowRuntime()) return () => {}
+  // Global listeners also receive hide/show events targeted at other windows.
+  return getCurrentWindow().listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
+    onVisible(payload)
+  })
+}

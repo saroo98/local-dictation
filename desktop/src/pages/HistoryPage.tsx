@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { listen } from '@tauri-apps/api/event'
+import { watchCurrentWindowVisibility } from '@/tauri/windowControls'
 
 import { useBridge } from '@/bridge/bridgeContext'
 import { useRuntimeState } from '@/bridge/useRuntimeState'
@@ -44,8 +44,8 @@ export function HistoryPage() {
     let unlisten: (() => void) | undefined
     const onVisible = () => { if (!document.hidden) void refresh() }
     document.addEventListener('visibilitychange', onVisible)
-    void listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
-      if (!cancelled && payload) void refresh()
+    void watchCurrentWindowVisibility((visible) => {
+      if (!cancelled && visible) void refresh()
     }).then((off) => { if (cancelled) off(); else unlisten = off }).catch(() => undefined)
     return () => { cancelled = true; unlisten?.(); document.removeEventListener('visibilitychange', onVisible) }
   }, [canRead, refresh])

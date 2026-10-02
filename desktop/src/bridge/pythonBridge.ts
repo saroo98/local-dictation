@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { watchCurrentWindowVisibility } from '@/tauri/windowControls'
 
 import type {
   AppState,
@@ -151,9 +151,9 @@ export function createPythonBridge(): Bridge {
     document.addEventListener('visibilitychange', visibilityChanged)
     if (isTauri()) {
       try {
-        const off = await listen<boolean>('local-dictation:window-visibility', ({ payload }) => {
+        const off = await watchCurrentWindowVisibility((visible) => {
           visibilityVersion += 1
-          nativeVisible = payload
+          nativeVisible = visible
           refreshVisibleState()
         })
         if (currentGeneration !== generation) { off(); return }

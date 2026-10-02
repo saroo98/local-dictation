@@ -5,6 +5,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import math
 import os
+import queue
 import re
 import site
 import socket
@@ -146,6 +147,7 @@ session_log_file: Optional[Path] = None
 
 SETTINGS = settings.load_settings()
 hotkey_listener = None  # pynput GlobalHotKeys listener, set at startup
+hotkey_events = queue.SimpleQueue()
 mouse_listener = None   # pynput mouse.Listener, set at startup
 audio_stream = None     # sounddevice InputStream, set at startup
 tray_icon = None        # pystray.Icon, set at startup when pystray is installed
@@ -4150,7 +4152,22 @@ def is_valid_hotkey(raw: str) -> bool:
 def on_hotkey_toggle() -> None:
     if shutting_down or root is None:
         return
-    root.after(0, toggle_recording_from_shortcut)
+    # Tk calls from another thread can block the Windows keyboard hook.
+    hotkey_events.put(None)
+
+
+def drain_hotkey_events() -> None:
+    try:
+        while True:
+            try:
+                hotkey_events.get_nowait()
+            except queue.Empty:
+                break
+            if not shutting_down and root is not None:
+                toggle_recording_from_shortcut()
+    finally:
+        if not shutting_down and root is not None:
+            root.after(25, drain_hotkey_events)
 
 
 def start_hotkey_listener(raw: str, *, strict: bool = False):
@@ -4913,6 +4930,7 @@ def main(initial_action: str = "run-app") -> None:
 
     control_stop_event = start_control_server()
     release_launch_lock()
+    root.after(0, drain_hotkey_events)
     mouse_listener = mouse.Listener(on_click=on_global_mouse_click)
     mouse_listener.start()
     hotkey_listener = start_hotkey_listener(SETTINGS["hotkey"])

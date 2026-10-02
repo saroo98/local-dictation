@@ -25,7 +25,14 @@ vi.mock('@tauri-apps/api/event', () => ({
   }),
 }))
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onMoved: movedMock, startDragging: vi.fn(async () => undefined) }),
+  getCurrentWindow: () => ({
+    onMoved: movedMock,
+    startDragging: vi.fn(async () => undefined),
+    listen: vi.fn(async (name: string, callback: (event: { payload: unknown }) => void) => {
+      handlers.set(name, callback)
+      return () => { handlers.delete(name) }
+    }),
+  }),
 }))
 
 function context(status: BackendStatus): BackendStatusContextValue {
