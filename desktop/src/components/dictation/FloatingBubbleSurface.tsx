@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Clipboard, Ellipsis, Play, Square } from 'lucide-react'
+import { AlertTriangle, Check, Clipboard, Ellipsis, Square } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 
 import { useBridge } from '@/bridge/bridgeContext'
@@ -15,7 +15,7 @@ import {
 } from '@/tauri/windowControls'
 
 const iconClasses: Record<AppState['status'], string> = {
-  idle: 'bg-primary text-primary-foreground',
+  idle: 'bg-[#6250C8] text-white',
   recording: 'bg-destructive text-destructive-foreground',
   transcribing: 'bg-amber-500 text-amber-950',
   'paste-ready': 'bg-sky-600 text-white',
@@ -27,7 +27,7 @@ function StateIcon({ status }: { status: AppState['status'] }) {
   if (status === 'transcribing') return <Ellipsis className="h-5 w-5" strokeWidth={2} />
   if (status === 'paste-ready') return <Clipboard className="h-[18px] w-[18px]" strokeWidth={1.9} />
   if (status === 'error') return <AlertTriangle className="h-[18px] w-[18px]" strokeWidth={1.9} />
-  if (status === 'idle') return <Play className="ml-0.5 h-5 w-5 fill-current" strokeWidth={1.8} />
+  if (status === 'idle') return <img src="/branding/icon-white.svg" alt="" className="h-7 w-7" draggable={false} />
   return <Check className="h-5 w-5" strokeWidth={1.8} />
 }
 

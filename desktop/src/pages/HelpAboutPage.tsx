@@ -15,7 +15,7 @@ export function HelpAboutPage() {
   const bridge = useBridge()
   const { backendStatus, startBackend, stopBackend, restartBackend } = useBackendStatus()
   const { state } = useRuntimeState()
-  const [version, setVersion] = useState(isTauriRuntime() ? 'Reading app version...' : 'Browser preview (0.1.0)')
+  const [version, setVersion] = useState(isTauriRuntime() ? 'Reading app version...' : 'Browser preview')
   const [pending, setPending] = useState(false)
   const actionPending = useRef(false)
   const isBrowserMock = backendStatus?.health?.backend_owner === 'browser-mock'
@@ -122,6 +122,8 @@ export function HelpAboutPage() {
             <CardTitle>Version</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <img src="/branding/logo-horizontal-color.svg" alt="Local Dictation" className="h-auto w-64 max-w-full dark:hidden" width={627} height={128} />
+            <img src="/branding/logo-horizontal-white.svg" alt="Local Dictation" className="hidden h-auto w-64 max-w-full dark:block" width={627} height={128} />
             <p className="text-sm text-muted-foreground">{version}</p>
           </CardContent>
         </Card>

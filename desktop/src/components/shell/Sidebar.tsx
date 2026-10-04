@@ -1,5 +1,3 @@
-import { AudioLines } from 'lucide-react'
-
 import type { useAppNavigation } from '@/app/useAppNavigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
@@ -12,12 +10,12 @@ export function Sidebar({ navigation }: SidebarProps) {
   return (
     <aside className="flex min-h-screen flex-col bg-card/80 px-4 py-5 backdrop-blur">
       <div className="mb-7 flex items-center gap-3 px-2">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-          <AudioLines className="h-5 w-5" strokeWidth={1.8} />
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#6250C8] text-white shadow-sm">
+          <img src="/branding/icon-white.svg" alt="" className="h-8 w-8" draggable={false} />
         </div>
         <div>
           <p className="text-sm font-semibold leading-none">Local Dictation</p>
-          <p className="mt-1 text-xs text-muted-foreground">Tauri desktop UI</p>
+          <p className="mt-1 text-xs text-muted-foreground">Offline voice typing</p>
         </div>
       </div>
 

@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="desktop/public/branding/logo-horizontal-white.svg">
+  <img src="desktop/public/branding/logo-horizontal-color.svg" alt="Local Dictation" width="420">
+</picture>
+
 # Local Dictation: Offline Speech-to-Text for Windows
 
 Local Dictation is a Windows desktop app for voice typing with local Whisper
@@ -6,7 +11,7 @@ copy the transcript or paste it into a writable field in another app.
 Transcription runs on your computer using faster-whisper, without a cloud
 speech service or an app account.
 
-**Desktop version: 0.1.1.** The Windows installer release is being prepared.
+**Desktop version: 0.1.2.** The Windows installer release is being prepared.
 There are currently no published releases. When available, downloads will be
 listed on the [GitHub releases page](https://github.com/saroo98/local-dictation/releases).
 You can build from source using the instructions below.
