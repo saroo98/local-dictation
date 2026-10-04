@@ -12,7 +12,7 @@
     "typecheck": "tsc -b",
     "test": "vitest",
     "tauri": "tauri",
-    "tauri:build": "npm run build:backend && tauri build",
+    "tauri:build": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\build-desktop.ps1",
     "preview": "vite preview"
   },
   "dependencies": {

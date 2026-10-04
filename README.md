@@ -110,14 +110,13 @@ or publish a release. CUDA libraries are installed once in `cuda/`, outside the
 sidecar's one-file archive. They make the GPU installer substantially larger;
 neither build variant includes speech models or a development environment.
 
-For a CPU-only installer, stage the backend without CUDA, then invoke Tauri
-without the default GPU staging step:
+The build wrapper remaps compiler source paths, checks both executables for
+personal build paths and keeps packaging temporary files in ignored `build/`.
+For a CPU-only installer, use the same wrapper without CUDA resources:
 
 ```powershell
 # repository root
-.\scripts\build-backend-sidecar.ps1 -CpuOnly
-cd desktop
-npm run tauri -- build
+.\scripts\build-desktop.ps1 -CpuOnly
 ```
 
 Python resolution is constrained by `backend/requirements-lock.txt`; optional

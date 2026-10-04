@@ -2,7 +2,7 @@ use std::{
     ffi::OsString,
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
@@ -10,6 +10,9 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(debug_assertions)]
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tauri::{menu::MenuBuilder, tray::TrayIconBuilder, Emitter, Manager, WindowEvent};
@@ -430,6 +433,7 @@ fn choose_backend_launch_strategy(
     BackendLaunchStrategy::MissingRequiredSidecar
 }
 
+#[cfg(debug_assertions)]
 fn repo_root() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(root) = manifest_dir
@@ -449,6 +453,7 @@ fn runtime_data_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(r"C:\local-dictation"))
 }
 
+#[cfg(debug_assertions)]
 fn sidecar_source_binary_path() -> PathBuf {
     repo_root()
         .join("desktop")
@@ -743,6 +748,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(debug_assertions)]
 fn python_candidates() -> Vec<PathBuf> {
     let root = repo_root();
     vec![
@@ -751,6 +757,7 @@ fn python_candidates() -> Vec<PathBuf> {
     ]
 }
 
+#[cfg(debug_assertions)]
 fn python_executable() -> Result<PathBuf, String> {
     python_candidates()
         .into_iter()
@@ -763,6 +770,7 @@ fn python_executable() -> Result<PathBuf, String> {
         })
 }
 
+#[cfg(debug_assertions)]
 fn backend_script() -> Result<PathBuf, String> {
     let root_script = repo_root().join("backend").join("bubble_dictate.py");
     if root_script.exists() {
@@ -775,6 +783,7 @@ fn backend_script() -> Result<PathBuf, String> {
     ))
 }
 
+#[cfg(debug_assertions)]
 fn backend_workdir(script: &Path) -> PathBuf {
     script.parent().map(PathBuf::from).unwrap_or_else(repo_root)
 }
@@ -996,9 +1005,12 @@ fn current_backend_status(manager: &Mutex<BackendManager>) -> Result<BackendStat
 }
 
 fn sidecar_binary_path() -> Result<PathBuf, String> {
-    let source = sidecar_source_binary_path();
-    if cfg!(debug_assertions) && source.is_file() {
-        return Ok(source);
+    #[cfg(debug_assertions)]
+    {
+        let source = sidecar_source_binary_path();
+        if source.is_file() {
+            return Ok(source);
+        }
     }
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     let directory = executable
@@ -1033,9 +1045,14 @@ fn spawn_backend(
     launch_id: &str,
 ) -> Result<(ManagedBackendChild, String), String> {
     let sidecar = sidecar_binary_path();
+    #[cfg(debug_assertions)]
     let python = python_executable();
+    #[cfg(debug_assertions)]
+    let python_available = python.is_ok();
+    #[cfg(not(debug_assertions))]
+    let python_available = false;
     let (executable, args, workdir, launch_kind) = match choose_backend_launch_strategy(
-        cfg!(debug_assertions), sidecar.is_ok(), python.is_ok(),
+        cfg!(debug_assertions), sidecar.is_ok(), python_available,
     ) {
         BackendLaunchStrategy::Sidecar => {
             let executable = sidecar?;
@@ -1043,9 +1060,14 @@ fn spawn_backend(
             (executable, backend_sidecar_args().map(OsString::from).to_vec(), workdir, "sidecar")
         }
         BackendLaunchStrategy::PythonFallback => {
-            let script = backend_script()?;
-            let workdir = backend_workdir(&script);
-            (python?, vec![script.into_os_string(), OsString::from("--api")], workdir, "python-fallback")
+            #[cfg(debug_assertions)]
+            {
+                let script = backend_script()?;
+                let workdir = backend_workdir(&script);
+                (python?, vec![script.into_os_string(), OsString::from("--api")], workdir, "python-fallback")
+            }
+            #[cfg(not(debug_assertions))]
+            return Err("Python fallback is only available in debug builds.".to_string());
         }
         BackendLaunchStrategy::MissingRequiredSidecar => return Err(format!(
             "Backend sidecar is required for packaged builds. Build it with npm run build:backend. {}",
