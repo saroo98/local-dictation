@@ -1,0 +1,2 @@
+# Optional CUDA 12 libraries for Windows x64. CPU inference needs none of these.
+-r requirements-cuda-lock.txt

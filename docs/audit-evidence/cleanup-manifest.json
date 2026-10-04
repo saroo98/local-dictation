@@ -1,0 +1,64 @@
+{
+  "created_on": "2026-10-02",
+  "source_root": "<repository>",
+  "archive_root": "<private-archive>",
+  "baseline_commit": "462ce3401ab6ab59cd1bdbc0ac2baae362ca1405",
+  "preserved_runtime_data_root": "C:\\local-dictation",
+  "runtime_settings_and_history_moved_or_rewritten": false,
+  "git_backup": "git-before-cleanup",
+  "active_worktrees": 1,
+  "git_history_committed_or_staged": false,
+  "moves": {
+    "bubble_dictate.py": "backend/bubble_dictate.py",
+    "config.py": "backend/config.py",
+    "control_bridge.py": "backend/control_bridge.py",
+    "icons.py": "backend/icons.py",
+    "settings.py": "backend/settings.py",
+    "requirements.txt": "backend/requirements.txt",
+    "requirements-build.txt": "backend/requirements-build.txt",
+    "test_bubble_dictate.py": "backend/tests/test_bubble_dictate.py",
+    "test_control_bridge.py": "backend/tests/test_control_bridge.py",
+    "test_icons.py": "backend/tests/test_icons.py",
+    "test_settings.py": "backend/tests/test_settings.py",
+    "create-shortcut.ps1": "scripts/create-shortcut.ps1",
+    "remove-shortcuts.ps1": "scripts/remove-shortcuts.ps1",
+    "start-bubble.bat": "scripts/start-bubble.bat",
+    "watch-log.ps1": "scripts/watch-log.ps1",
+    "HANDOFF.md": "docs/history/migration-handoff.md",
+    "CONTEXT.md": "docs/history/project-context.md",
+    "settings-redesign-preview.png": "docs/history/settings-preview.png",
+    "docs/ui-council-issue-audit-2026-06-15.txt": "docs/history/ui-audit-2026-06-15.txt",
+    "docs/superpowers/plans/2026-06-15-copy-only-fast-shutdown.md": "docs/history/copy-only-fast-shutdown-plan.md"
+  },
+  "archives": {
+    "previous-tauri-worktree": "complete former <previous-checkout> checkout and generated files",
+    "previous-rust-target": "former canonical desktop/src-tauri/target",
+    "previous-local-files": [
+      ".claude",
+      "__pycache__",
+      "build",
+      "logs",
+      "dictation_debug.log",
+      "run.log",
+      "settings.json",
+      "transcript_history.json",
+      "CODEX_HANDOFF.md",
+      "dictate.py",
+      "keytest.py"
+    ],
+    "previous-plan-directories": "empty former docs/superpowers hierarchy",
+    "previous-canonical-backend.exe": "previous generated canonical sidecar"
+  },
+  "compatibility_edits": [
+    "repository-relative Python source/venv lookup",
+    "repository-relative sidecar/shortcut/legacy launch scripts",
+    "runtime log path points to C:\\local-dictation",
+    "build script checks native exit codes and validates generated cleanup path",
+    "current README/architecture/AGENTS and historical-note separation"
+  ],
+  "generated_outputs_ignored": true,
+  "app_fixes_planned_not_implemented": true,
+  "privacy_redactions": [
+    "machine-specific paths and test window identity"
+  ]
+}

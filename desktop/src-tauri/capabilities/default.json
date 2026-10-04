@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Local window events, bubble dragging and native app metadata.",
+  "windows": ["main", "bubble", "quick-popover"],
+  "permissions": ["core:event:default", "core:window:allow-start-dragging", "core:app:allow-version"]
+}

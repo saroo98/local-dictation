@@ -1,192 +1,177 @@
-# Local Dictation Bubble
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="desktop/public/branding/logo-horizontal-white.svg">
+  <img src="desktop/public/branding/logo-horizontal-color.svg" alt="Local Dictation" width="420">
+</picture>
 
-Local Dictation Bubble is an offline Windows speech-to-text app for fast voice typing. It uses `faster-whisper` locally, tries CUDA GPU transcription first, falls back to CPU when needed, and pastes the transcript into the field you click.
+# Local Dictation: Offline Speech-to-Text for Windows
 
-The app is designed for people who want a tiny always-ready dictation bubble without cloud APIs, accounts, telemetry, or uploaded audio.
+Local Dictation is a Windows desktop app for voice typing with local Whisper
+speech recognition. Record from a floating bubble or a keyboard shortcut, then
+copy the transcript or paste it into a writable field in another app.
+Transcription runs on your computer using faster-whisper, without a cloud
+speech service or an app account.
+
+**Desktop version: 0.1.2.** [Download the Windows x64 installer](https://github.com/saroo98/local-dictation/releases/download/v0.1.2/Local.Dictation_0.1.2_x64-setup.exe)
+or open the [release notes and SHA-256 checksum](https://github.com/saroo98/local-dictation/releases/tag/v0.1.2).
+The installer includes CPU support and NVIDIA CUDA libraries, making the
+download approximately 1.43 GB. Speech models are downloaded separately.
 
 ## Features
 
-- Offline Windows dictation with local `faster-whisper`
-- CUDA-first GPU loading with CPU fallback
-- Tiny always-on-top bubble for quick recording
-- Manual-stop recording flow: click play to record, click stop to transcribe
-- Click a target text field after transcription to paste
-- Clipboard keeps the last transcript even if paste fails
-- Right-click quick history for recent transcripts
-- Optional Desktop, Start Menu, Startup, History, and Debug Log shortcuts
-- Local transcript history JSON only
-- No cloud API calls, no telemetry, no permanent audio storage
+- **Floating dictation bubble:** click to start or stop recording, drag to move,
+  and right-click for recent transcripts and app controls.
+- **Global keyboard shortcut:** Ctrl+Alt+D by default, configurable in Settings.
+- **Clipboard and paste:** completed text stays available in history when
+  delivery to another app fails.
+- **Local AI models:** choose a built-in Whisper model or add a compatible
+  faster-whisper/CTranslate2 model. Downloads require an explicit action.
+- **CPU and NVIDIA CUDA:** automatic mode tries CUDA then CPU; explicit CPU or
+  CUDA modes are also available.
+- **History and exports:** keep the last five transcripts locally, copy recent
+  entries, or export history as plain text or Markdown.
+- **Appearance and tray:** light, dark and system themes; closing the main
+  window keeps the app available from the system tray.
 
-## Who It Is For
+## Getting started
 
-Use this if you want:
+The desktop package targets Windows x64. You need a working microphone and
+enough memory and disk space for your selected model. CUDA mode also needs a
+compatible NVIDIA GPU and driver. CPU mode does not require an NVIDIA GPU.
 
-- offline dictation for Windows
-- local voice typing without sending speech to a server
-- a small desktop dictation bubble
-- faster-whisper speech recognition on an NVIDIA GPU
-- clipboard-based dictation that works across apps
-- a simple accessibility and productivity tool for writing faster
+1. Download and run the Windows installer, then open **Local Dictation**.
+2. Open **Models**. Download a model explicitly, or add an existing compatible
+   local model. Models are not included in the installer.
+3. In **Settings**, select the downloaded model, your language and device mode,
+   then save. **Auto** permits CPU fallback; **CUDA** reports a failure if GPU
+   loading fails.
+4. Wait for recording resources to become ready. If a model or microphone fails,
+   use **Retry resources** on Recording or Help/About after resolving the issue.
+5. Focus the text field where you want to dictate. Click the bubble or press
+   **Ctrl+Alt+D** to start, speak, then toggle again to stop and transcribe.
+6. When an editable field is still focused, the app attempts automatic paste.
+   Otherwise, click a writable target after transcription. You can also copy
+   the completed text from Recording or History.
 
-## Requirements
+Right-click the bubble for quick history, Settings and tray controls. Closing
+the main window hides it; use **Quit** in the tray to exit the app and its owned
+backend. A shortcut requested during transcription does not interrupt inference.
 
-- Windows
-- Python 3.12 recommended
-- Microphone
-- NVIDIA GPU recommended for CUDA mode
-- CPU fallback works, but transcription can be slower
+## Privacy and offline use
 
-Python packages are listed in `requirements.txt`.
+- Microphone audio is processed in memory. The app does not save recordings as
+  audio files or send them to a cloud transcription service.
+- Inference uses a complete local model snapshot. Model downloads from Hugging
+  Face use the network when you explicitly request them; cached models can be
+  used offline.
+- Settings, the last five transcripts and rotating logs live in
+  `C:\local-dictation`, separate from the source and installed binaries.
+- Transcript text is omitted from logs by default. Local history, clipboard
+  contents and exported files still contain your text. Treat them as personal
+  data when sharing files or diagnostics.
+- The application has no telemetry or analytics integration. Fonts and icons
+  are bundled with the desktop interface.
 
-## Install
+Private settings, transcripts, exports, credentials, model caches and generated
+build output must stay out of Git. See the [privacy review and release gates](docs/release-preparation.md)
+for the repository scan, approved history cleanup and its limitations.
 
-This project currently expects the local path:
+## Build from source
+
+Development requires Windows, Python, Node.js/npm and the Rust MSVC toolchain.
+Python 3.12 is the verified development environment. Run setup from the
+repository root:
 
 ```powershell
-C:\local-dictation
-```
-
-From PowerShell:
-
-```powershell
-cd C:\local-dictation
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-build.txt
+cd desktop
+npm ci
+npm run tauri dev
 ```
 
-The model must already be available locally because `LOCAL_FILES_ONLY = True` in `config.py`.
+Debug prefers a generated Python sidecar when present, otherwise the root
+`.venv` and `backend/bubble_dictate.py`. Release builds require the sidecar.
+`npm run dev` from `desktop/` previews the interface with synthetic data; it
+cannot verify native windows, microphone input, global shortcuts or paste.
 
-## Run
+### Windows installer
+
+The default GPU build includes pinned CUDA libraries. Install their separate
+requirements from the repository root, then package from `desktop/`:
 
 ```powershell
-cd C:\local-dictation
-.\.venv\Scripts\python.exe .\bubble_dictate.py
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-cuda.txt
+cd desktop
+npm run tauri:build
 ```
 
-Or install shortcuts:
+The installer is created under
+`desktop/src-tauri/target/release/bundle/nsis`. Building does not install the app
+or publish a release. CUDA libraries are installed once in `cuda/`, outside the
+sidecar's one-file archive. They make the GPU installer substantially larger;
+neither build variant includes speech models or a development environment.
+
+The build wrapper remaps compiler source paths, checks both executables for
+personal build paths and keeps packaging temporary files in ignored `build/`.
+For a CPU-only installer, use the same wrapper without CUDA resources:
 
 ```powershell
-cd C:\local-dictation
-powershell -ExecutionPolicy Bypass -File .\create-shortcut.ps1
+# repository root
+.\scripts\build-desktop.ps1 -CpuOnly
 ```
 
-This creates:
+Python resolution is constrained by `backend/requirements-lock.txt`; optional
+CUDA dependencies have their own lock. JavaScript and Rust dependency versions
+are recorded in their lockfiles.
 
-- Desktop: `Local Dictation Toggle`
-- Desktop: `Local Dictation History`
-- Desktop: `Local Dictation Debug Log`
-- Start Menu shortcuts
-- Startup shortcut for resident mode
+### Checks
 
-To remove them:
+Run each group from the directory named in its comment:
 
 ```powershell
-cd C:\local-dictation
-powershell -ExecutionPolicy Bypass -File .\remove-shortcuts.ps1
+# backend/
+..\.venv\Scripts\python.exe -B -m unittest discover -s tests
+
+# desktop/
+npm test -- --run
+npm run typecheck
+npm run lint
+npm run build:frontend
+
+# desktop/src-tauri/
+cargo fmt --check
+cargo test --locked
 ```
 
-## How To Use
+The latest reliability fixes cover bubble visibility updates and nonblocking
+shortcut dispatch. Automated and process-level checks are documented in the
+[verification report](docs/verification.md). Physical bubble clicks and dragging,
+OS shortcut reliability, real dictation/paste and clean-machine installation
+still need interactive acceptance; automated checks do not prove those cases.
 
-1. Click the green play bubble to start recording.
-2. Speak normally.
-3. Click the red stop bubble to stop recording.
-4. Wait for transcription.
-5. Click the text field where the transcript should go.
-6. The app pastes the transcript.
+## Repository and architecture
 
-If your cursor is already in an editable text field (a chat box, editor, search
-box — native, browser, or Electron apps), the transcript pastes there
-automatically as soon as it is ready, so you can skip step 5. If no editable
-field is focused, it waits for you to click one (the flow above). The bubble is a
-no-activate window, so clicking it never steals focus from your text field.
-Auto-paste can be turned off with `AUTO_PASTE_WHEN_EDITABLE = False` in `config.py`.
-
-Right-click the bubble to show recent transcript history. Hold left click on the bubble for 2 seconds to quit.
-
-## Configuration
-
-Edit `config.py` for user-editable settings:
-
-- model name
-- language
-- CUDA preference
-- CPU thread count
-- bubble size and position
-- transcript cleanup
-- history limits
-- shortcut behavior
-- log paths
-
-## Settings
-
-Right-click the bubble and choose **Settings** to open the in-app panel. Settings are
-saved to `C:\local-dictation\settings.json` and most apply live.
-
-**Transcription**
-
-- Input Language: English (US), Auto Detect, Kurdish, Persian, Arabic. Whisper has no
-  native Kurdish model, so Kurdish uses auto-detect as a best-effort fallback.
-- Model: Fast (`small`), Balanced (`large-v3-turbo`, default), High Accuracy (`large-v3`).
-  The chosen model must already be cached locally because `LOCAL_FILES_ONLY = True`; a tier
-  you have never downloaded will fail to load and the app reverts to the previous tier.
-
-**Interface & Output**
-
-- App Theme: Dark Mode, Light Mode, or System (follows the Windows apps theme).
-- Panel Opacity: 70–100% for the popover and panels.
-- Default Text Format: Plain Text (`.txt`) or Markdown (`.md`), used by Export All.
-- Save Location: folder used by Export All (defaults to your Documents folder).
-
-**Commands & Hotkeys**
-
-- Start/Stop Recording hotkey: a global hotkey in pynput syntax, e.g. `<ctrl>+<alt>+d`.
-  Leave the field blank to disable it. Clicking the bubble always toggles recording.
-
-**Bottom actions**
-
-- Settings, History, Export All, and Close app are available in the Settings panel; the
-  quick-history popover footer has Settings, History, and Close app.
-- Export All writes the full transcript history to one timestamped file
-  (`dictation_export_YYYYMMDD_HHMMSS.txt` or `.md`) in the Save Location.
-
-## Privacy
-
-Local Dictation Bubble is local-only by design.
-
-- Transcript text is **not** written to logs unless you set `LOG_TRANSCRIPT_TEXT = True`
-  in `config.py`. Transcript history is kept locally in `transcript_history.json`.
-
-- Audio is captured locally.
-- Transcription runs locally.
-- Transcript history is stored locally.
-- No OpenAI API calls are used.
-- No cloud speech APIs are used.
-- No telemetry is sent.
-
-## Development Checks
-
-Run tests:
-
-```powershell
-cd C:\local-dictation
-.\.venv\Scripts\python.exe -B -m unittest test_bubble_dictate.py -v
+```text
+local-dictation/
+  backend/               Python audio, inference, persistence and local bridge
+    tests/               Python unit tests
+  desktop/               React/TypeScript interface and tests
+    src-tauri/           Rust shell, native windows, tray and Windows packaging
+  scripts/               Windows launch, build and shortcut utilities
+  docs/                  Architecture, audits, verification and release gates
+    history/             Historical notes and design references
 ```
 
-Run syntax checks:
+- [Architecture and data flow](docs/architecture.md)
+- [Baseline audit](docs/audit.md)
+- [Implementation plan](docs/implementation-plan.md)
+- [Implementation status](docs/implementation-status.md)
+- [Bubble and shortcut fixes](docs/bubble-shortcut-fix.md)
 
-```powershell
-cd C:\local-dictation
-.\.venv\Scripts\python.exe -B -c "from pathlib import Path; files=sorted(Path('.').glob('*.py')); [compile(path.read_text(encoding='utf-8'), str(path), 'exec') for path in files]; print('syntax ok:', ', '.join(str(path) for path in files))"
-```
+`LOCAL_DICTATION_DATA_DIR` selects a separate data profile for isolated local
+checks. Profiles share the loopback control port, so they cannot run concurrently
+with an existing backend on that port.
 
-Check imports:
-
-```powershell
-cd C:\local-dictation
-.\.venv\Scripts\python.exe -B -c "import config; import bubble_dictate; print('imports ok')"
-```
-
-## Search Terms
-
-Offline Windows dictation, local speech to text, faster-whisper dictation, Whisper voice typing, CUDA transcription, GPU speech recognition, local clipboard dictation, Windows accessibility dictation, Python Tkinter dictation bubble, privacy-first voice typing.
+`scripts/start-bubble.bat` launches the legacy Python interface. The shortcut
+scripts manage that interface's shortcuts and should only be run when wanted.
+Historical notes describe older versions and do not override current source.

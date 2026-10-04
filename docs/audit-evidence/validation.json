@@ -1,0 +1,102 @@
+{
+  "checked_on": "2026-10-02",
+  "source_root": "<repository>",
+  "baseline_commit": "462ce3401ab6ab59cd1bdbc0ac2baae362ca1405",
+  "tests": {
+    "python": {
+      "passed": 156,
+      "command": "..\\.venv\\Scripts\\python.exe -B -m unittest discover -s tests",
+      "cwd": "backend"
+    },
+    "frontend": {
+      "passed": 42,
+      "files": 13,
+      "command": "npm test -- --run",
+      "cwd": "desktop"
+    },
+    "rust": {
+      "passed": 10,
+      "command": "cargo test --offline --locked",
+      "cwd": "desktop/src-tauri"
+    }
+  },
+  "checks": {
+    "python_syntax_and_imports": "passed",
+    "pip_check": "passed",
+    "powershell_script_parse": "passed (4 scripts)",
+    "frontend_lint": "passed",
+    "typescript_frontend_build": "passed",
+    "rust_format": "passed",
+    "sidecar_build": "passed"
+  },
+  "sidecar": {
+    "path": "desktop/src-tauri/binaries/local-dictation-backend-x86_64-pc-windows-msvc.exe",
+    "bytes": 104578502,
+    "nvidia_dll_entries": 0,
+    "installed": false
+  },
+  "native_release": {
+    "result": "blocked",
+    "command": "npm run tauri -- build --verbose -- --offline --locked --jobs 1",
+    "failure": "windows 0.61.3 compilation: memory allocation of 1327120 bytes failed; rustc exit 0xc0000409",
+    "installer_built": false,
+    "isolated_memchr_release_checks": "passed with and without explicit x86_64-pc-windows-msvc target",
+    "physical_headroom_kib": 2882344,
+    "commit_headroom_kib": 3280828,
+    "application_code_defect_inferred": false
+  },
+  "browser": {
+    "runtime": "Vite browser mock in isolated audit context",
+    "open_history": "clicked; no navigation",
+    "browse": "clicked; no action",
+    "installed_badge": {
+      "theme": "dark neutral",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "foreground_rgb": [
+        0,
+        122,
+        85
+      ],
+      "composited_background_rgb": [
+        16,
+        38,
+        37
+      ],
+      "contrast": 2.952499408673023
+    },
+    "quick_history": {
+      "css_width": 410,
+      "css_height": 300,
+      "synthetic_two_line_entries": 3,
+      "footer_bottom_css_px": 292.4573802947998,
+      "viewport_clipping_confirmed": false
+    }
+  },
+  "dependency_queries": {
+    "npm_affected_packages": 8,
+    "npm_severity": {
+      "high": 5,
+      "moderate": 3
+    },
+    "npm_omit_dev_affected_packages": 2,
+    "python_distributions_queried": 59,
+    "cargo_lock_registry_entries_queried": 492,
+    "osv_matched_python_packages": 4,
+    "osv_matched_cargo_packages": 10,
+    "advisory_records_include_alias_duplicates": true
+  },
+  "native_behavior_tested": false,
+  "not_performed": [
+    "real microphone capture",
+    "real clipboard write or key injection",
+    "model download or inference",
+    "installation",
+    "commit or push",
+    "publication"
+  ],
+  "functional_findings_implemented": false,
+  "privacy_redactions": [
+    "machine-specific paths and test window identity"
+  ]
+}

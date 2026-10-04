@@ -1,0 +1,17 @@
+{
+  "candidate": "%LOCALAPPDATA%\\Local Dictation\\local-dictation-desktop.exe",
+  "candidate_sha256": "dbfba0a2d92504c045d720d0debbe5e0da3d5303a0e27b3bcfd33d0a66c92937",
+  "real_microphone_capture": false,
+  "real_paste": false,
+  "shutdown_method": "controlled abrupt native exit; tests the managed job, not tray Quit",
+  "protocol": 4,
+  "recoverable_empty_cache_startup": true,
+  "wrong_owner_shutdown_rejected": true,
+  "owned_worker_exited": true,
+  "owned_control_port_closed": true,
+  "passed": true,
+  "privacy_redactions": [
+    "machine-specific paths and test window identity",
+    "process/window identifiers and foreground diagnostics"
+  ]
+}

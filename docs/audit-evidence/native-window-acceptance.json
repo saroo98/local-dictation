@@ -1,0 +1,127 @@
+{
+  "candidate": "<repository>\\desktop\\src-tauri\\target\\release\\local-dictation-desktop.exe",
+  "backend": "independent controlled server",
+  "real_audio_capture": false,
+  "real_paste_injection": false,
+  "probe_stage": "activate-controlled-target",
+  "dpi": 96,
+  "initial_bubble_rect": [
+    40,
+    220,
+    176,
+    276
+  ],
+  "initial_bubble_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      40,
+      220,
+      176,
+      276
+    ],
+    "client_rect": [
+      0,
+      0,
+      136,
+      56
+    ],
+    "style": "0x14cb0000",
+    "extended_style": "0x8040118",
+    "visible": true,
+    "enabled": true
+  },
+  "initial_main_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      156,
+      156,
+      1272,
+      915
+    ],
+    "client_rect": [
+      0,
+      0,
+      1100,
+      720
+    ],
+    "style": "0x14cf0000",
+    "extended_style": "0x40110",
+    "visible": true,
+    "enabled": true
+  },
+  "initial_popover_window": {
+    "class": "Tauri Window",
+    "outer_rect": [
+      286,
+      286,
+      696,
+      586
+    ],
+    "client_rect": [
+      0,
+      0,
+      410,
+      300
+    ],
+    "style": "0x4cb0000",
+    "extended_style": "0x8040118",
+    "visible": false,
+    "enabled": true
+  },
+  "controlled_target": {
+    "class": "LocalDictationAcceptance-<redacted>",
+    "outer_rect": [
+      500,
+      350,
+      1000,
+      530
+    ],
+    "client_rect": [
+      0,
+      0,
+      484,
+      141
+    ],
+    "style": "0x14cf0000",
+    "extended_style": "0x108",
+    "visible": true,
+    "enabled": true
+  },
+  "controlled_edit": {
+    "class": "Edit",
+    "outer_rect": [
+      528,
+      411,
+      958,
+      471
+    ],
+    "client_rect": [
+      0,
+      0,
+      430,
+      60
+    ],
+    "style": "0x50010080",
+    "extended_style": "0x0",
+    "visible": true,
+    "enabled": true
+  },
+  "target_set_foreground_returned": false,
+  "failure": {
+    "type": "AssertionError",
+    "message": "could not activate controlled target"
+  },
+  "proof_limit": "The controlled target did not become foreground or receive the injected pointer event; Wry pointer/drag focus was not reached.",
+  "checks_not_reached": [
+    "bubble_pointer_delivery",
+    "bubble_click_focus_preservation",
+    "bubble_drag_movement_and_focus",
+    "popover_pointer_open_close_reopen",
+    "main_unminimize_from_popover",
+    "native_tray_quit"
+  ],
+  "privacy_redactions": [
+    "machine-specific paths and test window identity",
+    "process/window identifiers and foreground diagnostics"
+  ]
+}

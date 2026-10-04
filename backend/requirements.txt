@@ -1,0 +1,14 @@
+# Reviewed Windows Python 3.12 resolution. GPU libraries are optional.
+-c requirements-lock.txt
+faster-whisper==1.2.1
+huggingface-hub==1.19.0
+sounddevice==0.5.5
+numpy==2.4.6
+pyperclip==1.11.0
+pyautogui==0.9.54
+pynput==1.8.2
+pillow==12.3.0
+pystray==0.19.5
+
+# Windows only. comtypes powers UI Automation (auto-paste into focused chat boxes).
+comtypes==1.4.16; sys_platform == "win32"

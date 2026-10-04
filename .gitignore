@@ -10,8 +10,26 @@ dictation_export_*.txt
 dictation_export_*.md
 logs/
 *.lnk
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/binaries/
+build/
+.claude/
+.codex/
 
-# Local development notes and prototypes that are not part of the public app.
-CODEX_HANDOFF.md
-dictate.py
-keytest.py
+# Local credentials and private signing material.
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local model downloads and transcript exports.
+/models/
+/model-cache/
+/exports/

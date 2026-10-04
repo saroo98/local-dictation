@@ -1,0 +1,132 @@
+{
+  "checked_on": "2026-10-04",
+  "version": "0.1.2",
+  "artwork": {
+    "manifest_assets_verified": 108,
+    "hash_size_errors": 0,
+    "native_ico_sizes": [
+      16,
+      20,
+      24,
+      30,
+      32,
+      36,
+      40,
+      48,
+      60,
+      64,
+      72,
+      80,
+      96,
+      128,
+      256
+    ],
+    "svg_scripts_external_resources": false,
+    "supplied_artwork_unchanged": true
+  },
+  "artifacts": [
+    {
+      "path": "build/private-release-target/release/local-dictation-desktop.exe",
+      "bytes": 10055680,
+      "sha256": "a27f7bc07fe9f0ca53f194594092f54060b3225feee6373efce721b05ab315d5",
+      "supplied_icon_frames_verified": 15,
+      "personal_build_path_matches": 0
+    },
+    {
+      "path": "desktop/src-tauri/binaries/local-dictation-backend-x86_64-pc-windows-msvc.exe",
+      "bytes": 104650958,
+      "sha256": "95debfb77b3080df68cdb9be42cf65686ae003c6e4bc8f41661a897dd4633d7b",
+      "supplied_icon_frames_verified": 15,
+      "personal_build_path_matches": 0
+    },
+    {
+      "path": "build/private-release-target/release/bundle/nsis/Local Dictation_0.1.2_x64-setup.exe",
+      "bytes": 1426143850,
+      "sha256": "fdbf481ba637a34aefc78ef4445eec97fefa0fb56e58be13a15a783c6ad72f09",
+      "supplied_icon_frames_verified": 15
+    }
+  ],
+  "unpacked_backend_privacy": {
+    "archive_entries_scanned": 1170,
+    "frozen_modules_scanned": 1702,
+    "zip_entries_scanned": 155,
+    "code_objects_scanned": 36910,
+    "personal_build_path_matches": 0
+  },
+  "installation": {
+    "checked_on": "2026-10-04",
+    "version": "0.1.2",
+    "installer_exit_code": 0,
+    "installer_seconds": 15.578,
+    "native_matches_packaged_build_except_nsis_marker": true,
+    "installed_native_sha256": "438e899398c1a4d89480158ceb0888b8aa7962b440aaea804a6acc4f63859339",
+    "backend_matches_packaged_build": true,
+    "cuda_resource_count": 17,
+    "cuda_bytes": 2019016800,
+    "cuda_matches_packaged_build": true,
+    "settings_and_history_content_preserved": true,
+    "registered_installations": 1,
+    "registered_version": "0.1.2",
+    "installed_icon_frames": [
+      {
+        "name": "local-dictation-desktop.exe",
+        "supplied_frames": 15
+      },
+      {
+        "name": "local-dictation-backend.exe",
+        "supplied_frames": 15
+      },
+      {
+        "name": "uninstall.exe",
+        "supplied_frames": 15
+      }
+    ],
+    "installed_personal_build_path_matches": 0,
+    "passed": true
+  },
+  "native_owned_acceptance": {
+    "candidate_sha256": "a27f7bc07fe9f0ca53f194594092f54060b3225feee6373efce721b05ab315d5",
+    "real_microphone_capture": false,
+    "real_paste": false,
+    "shutdown_method": "controlled abrupt native exit; tests the managed job, not tray Quit",
+    "protocol": 4,
+    "recoverable_empty_cache_startup": true,
+    "wrong_owner_shutdown_rejected": true,
+    "owned_worker_exited": true,
+    "owned_control_port_closed": true,
+    "passed": true
+  },
+  "cached_cpu_startup": {
+    "device": "cpu",
+    "backend_health_seconds": 6.438,
+    "cached_resources_ready_seconds": 6.672
+  },
+  "visual_acceptance": {
+    "installed_version": "0.1.2",
+    "main_window_icon": true,
+    "sidebar_and_idle_bubble": true,
+    "about_color_wordmark": true,
+    "about_white_wordmark_in_dark_appearance": true,
+    "test_profile_hotkey_disabled": true,
+    "real_dictation_paste_performed": false,
+    "computer_use_stopped_by_owner": true,
+    "bubble_drag": "One automated drag did not demonstrate a saved move before interruption; cause not established."
+  },
+  "previous_software": {
+    "obsolete_legacy_shortcuts_removed": 4,
+    "previous_installed_version_replaced": true,
+    "personal_runtime_data_preserved": true,
+    "recovery_backups_retained_privately": true
+  },
+  "outstanding_acceptance": [
+    "Physical bubble click/drag and quick menu",
+    "Tray interaction",
+    "Repeated OS shortcut and real dictation/paste",
+    "Mixed-monitor DPI and clean-machine installation"
+  ],
+  "privacy_redactions": [
+    "Machine/profile paths, process/window identities and launch IDs omitted",
+    "Personal settings/history contents and fingerprints omitted",
+    "Screenshots and unrelated foreground content omitted"
+  ]
+}

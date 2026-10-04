@@ -1,0 +1,37 @@
+{
+  "historical_readme_preserved": true,
+  "moved_tracked_files_unchanged": 15,
+  "intentionally_changed_moved_scripts": [
+    "scripts/create-shortcut.ps1",
+    "scripts/start-bubble.bat"
+  ],
+  "unexpected_moved_file_differences": [],
+  "findings": 43,
+  "task_count": 15,
+  "unmapped_findings": [],
+  "linked_files_checked": 217,
+  "bad_links": [],
+  "trailing_whitespace": [],
+  "json_evidence_files": 6,
+  "head": "462ce3401ab6ab59cd1bdbc0ac2baae362ca1405",
+  "staged_diff_empty": true,
+  "diff_check_passed": true,
+  "active_worktrees": 1,
+  "remote_verification_exit": 0,
+  "remote_refs": [
+    "bf3fa3cd2d98767300d82c28cf058e6f15b02fba\trefs/heads/master"
+  ],
+  "sidecar_sha256": "4b4f8a90f47aaa52a546463d3698c8c12bf26697b6c70596ef85200b22864bc2",
+  "runtime_metadata": [
+    {
+      "name": "settings.json"
+    },
+    {
+      "name": "transcript_history.json"
+    }
+  ],
+  "passed": true,
+  "privacy_redactions": [
+    "personal file metadata"
+  ]
+}

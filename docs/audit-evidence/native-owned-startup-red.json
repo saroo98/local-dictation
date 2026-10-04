@@ -1,0 +1,128 @@
+{
+  "candidate": "<repository>\\desktop\\src-tauri\\target\\release\\local-dictation-desktop.exe",
+  "candidate_sha256": "bc3d061aa8deeb20cc9345d91f9c347390e91b505b786e1713d2abf3408988b2",
+  "real_microphone_capture": false,
+  "real_paste": false,
+  "shutdown_method": "controlled abrupt native exit; tests the managed job, not tray Quit",
+  "startup_accessibility": [
+    {
+      "root": "Local Dictation Quick History",
+      "names": []
+    },
+    {
+      "root": "Local Dictation Bubble",
+      "names": []
+    },
+    {
+      "root": "",
+      "names": [
+        null
+      ]
+    },
+    {
+      "root": "Local Dictation",
+      "names": [
+        "",
+        "Local Dictation",
+        "",
+        "Local Dictation - Web content",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Local Dictation",
+        "",
+        "",
+        "",
+        "Local Dictation",
+        "Tauri desktop UI",
+        "Main navigation",
+        "Recording",
+        "History",
+        "Models",
+        "Settings",
+        "Exports",
+        "Help/About",
+        "Local Dictation",
+        "Offline speech recognition. Browser preview uses simulated data.",
+        "",
+        "",
+        "Recording",
+        "Local speech recognition",
+        "Backend issue",
+        "Local bridge",
+        "Backend unhealthy",
+        "Appearance",
+        "",
+        "System",
+        "Theme Preset",
+        "",
+        "Neutral",
+        "Recording",
+        "Record and transcribe speech locally.",
+        "",
+        "Backend error",
+        "A process on the local backend port is not compatible or did not respond: Could not connect to local bridge: connection timed out Check Help/About or the top bar to start the local Python backend.",
+        "Start recording",
+        "Click once to record, click again to stop.",
+        "When transcription is ready, click a writable target to paste the text.",
+        "",
+        "Checking recording state",
+        "Audio capture and transcription run locally.",
+        "Model",
+        "Unavailable",
+        "Language",
+        "Unavailable",
+        "Latest transcript",
+        "Your latest completed transcript.",
+        "Start and stop recording to create a transcript.",
+        "Copy last",
+        "Open History",
+        "Floating bubble and transcript popover preview",
+        "Settings",
+        "History",
+        "Tray",
+        "Close",
+        "Notifications alt+T",
+        "",
+        "",
+        "",
+        null,
+        "System",
+        "System",
+        "Minimise",
+        "Maximise",
+        "Close"
+      ]
+    },
+    {
+      "root": "com.local.dictation-siw",
+      "names": []
+    },
+    {
+      "root": "",
+      "names": []
+    },
+    {
+      "root": "Default IME",
+      "names": []
+    },
+    {
+      "root": "MSCTFIME UI",
+      "names": []
+    }
+  ],
+  "failure": {
+    "type": "AssertionError",
+    "message": "owned backend did not expose recoverable state"
+  },
+  "privacy_redactions": [
+    "machine-specific paths and test window identity"
+  ]
+}

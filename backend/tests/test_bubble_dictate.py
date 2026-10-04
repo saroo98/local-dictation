@@ -1,0 +1,1799 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import bubble_dictate
+
+
+class TranscriptHistoryTests(unittest.TestCase):
+    def test_add_transcript_to_history_keeps_newest_five(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+
+            for text in ["one", "two", "three", "four", "five", "six"]:
+                history = bubble_dictate.add_transcript_to_history(
+                    text,
+                    history_path=history_path,
+                    limit=5,
+                )
+
+            self.assertEqual(history, ["two", "three", "four", "five", "six"])
+            self.assertEqual(
+                bubble_dictate.load_transcript_history(history_path),
+                ["two", "three", "four", "five", "six"],
+            )
+
+    def test_add_transcript_to_history_ignores_blank_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+
+            bubble_dictate.add_transcript_to_history("first", history_path=history_path, limit=5)
+            history = bubble_dictate.add_transcript_to_history(
+                "   ",
+                history_path=history_path,
+                limit=5,
+            )
+
+            self.assertEqual(history, ["first"])
+
+    def test_history_items_for_display_returns_newest_first(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+
+            for text in ["one", "two", "three", "four", "five", "six"]:
+                bubble_dictate.add_transcript_to_history(
+                    text,
+                    history_path=history_path,
+                    limit=5,
+                )
+
+            self.assertEqual(
+                bubble_dictate.history_items_for_display(history_path, limit=5),
+                ["six", "five", "four", "three", "two"],
+            )
+
+    def test_quick_history_items_for_display_returns_newest_three_with_times(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+            history_path.write_text(
+                json.dumps(
+                    [
+                        {"text": "one", "created_at": "2026-06-14T09:01:00"},
+                        {"text": "two", "created_at": "2026-06-14T10:35:00"},
+                        {"text": "three", "created_at": "2026-06-14T10:42:00"},
+                        {"text": "four", "created_at": "2026-06-14T11:08:00"},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = bubble_dictate.quick_history_items_for_display(
+                history_path=history_path,
+                limit=3,
+            )
+
+            self.assertEqual([item.text for item in items], ["four", "three", "two"])
+            self.assertEqual([item.display_time for item in items], ["11:08 AM", "10:42 AM", "10:35 AM"])
+
+    def test_quick_history_items_supports_old_string_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+            history_path.write_text(json.dumps(["old one", "old two"]), encoding="utf-8")
+
+            items = bubble_dictate.quick_history_items_for_display(
+                history_path=history_path,
+                limit=3,
+            )
+
+            self.assertEqual([item.text for item in items], ["old two", "old one"])
+            self.assertEqual([item.display_time for item in items], ["Earlier", "Earlier"])
+
+
+class TextCleanupTests(unittest.TestCase):
+    def test_clean_transcript_text_normalizes_spacing_and_capitalization(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("  hello    there  "),
+            "hello there",
+        )
+
+    def test_clean_transcript_text_fixes_duplicate_punctuation(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("hello,,,   world!!!", spoken_punctuation=True),
+            "Hello, world!",
+        )
+
+    def test_clean_transcript_text_converts_spoken_punctuation(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("hello comma world period", spoken_punctuation=True),
+            "Hello, world.",
+        )
+
+    def test_clean_transcript_text_converts_line_break_commands(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("first line new line second line new paragraph third", spoken_punctuation=True),
+            "First line\nSecond line\n\nThird",
+        )
+
+    def test_clean_transcript_text_skips_spoken_punctuation_for_non_english(self) -> None:
+        self.assertEqual(
+            bubble_dictate.clean_transcript_text("کاما comma", language="fa"),
+            "کاما comma",
+        )
+
+
+class CliControlTests(unittest.TestCase):
+    def test_parse_cli_action_detects_toggle_record(self) -> None:
+        self.assertEqual(
+            bubble_dictate.parse_cli_action(["--toggle-record"]),
+            "toggle-record",
+        )
+
+    def test_parse_cli_action_defaults_to_app(self) -> None:
+        self.assertEqual(bubble_dictate.parse_cli_action([]), "run-app")
+
+    def test_parse_cli_action_detects_resident(self) -> None:
+        self.assertEqual(
+            bubble_dictate.parse_cli_action(["--resident"]),
+            "resident",
+        )
+
+    def test_parse_cli_action_detects_show_history(self) -> None:
+        self.assertEqual(
+            bubble_dictate.parse_cli_action(["--show-history"]),
+            "show-history",
+        )
+
+    def test_parse_cli_action_detects_api(self) -> None:
+        self.assertEqual(
+            bubble_dictate.parse_cli_action(["--api"]),
+            "api",
+        )
+
+    def test_control_command_for_existing_instance_maps_start_recording_to_toggle(self) -> None:
+        self.assertEqual(
+            bubble_dictate.control_command_for_existing_instance("start-recording"),
+            "toggle-record",
+        )
+
+    def test_control_command_for_existing_instance_maps_show_history(self) -> None:
+        self.assertEqual(
+            bubble_dictate.control_command_for_existing_instance("show-history"),
+            "show-history",
+        )
+
+    def test_control_command_for_existing_instance_maps_api_to_health_check(self) -> None:
+        command = bubble_dictate.control_command_for_existing_instance("api")
+
+        self.assertIsNotNone(command)
+        self.assertEqual(json.loads(command), {"cmd": "health", "args": {}})
+
+    def test_api_mode_disables_python_visual_shell(self) -> None:
+        self.assertFalse(bubble_dictate.visual_shell_enabled("api"))
+        self.assertFalse(bubble_dictate.python_tray_enabled("api"))
+        self.assertFalse(bubble_dictate.startup_error_dialog_enabled("api"))
+
+    def test_standalone_modes_keep_python_visual_shell(self) -> None:
+        for action in ["run-app", "resident", "start-recording", "show-history"]:
+            with self.subTest(action=action):
+                self.assertTrue(bubble_dictate.visual_shell_enabled(action))
+                self.assertTrue(bubble_dictate.python_tray_enabled(action))
+                self.assertTrue(bubble_dictate.startup_error_dialog_enabled(action))
+
+    def test_hidden_api_root_is_kept_offscreen_and_invisible(self) -> None:
+        class FakeRoot:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+            def withdraw(self) -> None:
+                self.calls.append(("withdraw", ()))
+
+            def title(self, value: str) -> None:
+                self.calls.append(("title", (value,)))
+
+            def protocol(self, name: str, callback: object) -> None:
+                self.calls.append(("protocol", (name, callback)))
+
+            def geometry(self, value: str) -> None:
+                self.calls.append(("geometry", (value,)))
+
+            def overrideredirect(self, value: bool) -> None:
+                self.calls.append(("overrideredirect", (value,)))
+
+            def attributes(self, *args: object) -> None:
+                self.calls.append(("attributes", args))
+
+            def after(self, delay: int, callback: object) -> None:
+                self.calls.append(("after", (delay, callback)))
+
+        root = FakeRoot()
+
+        self.assertIs(bubble_dictate.configure_hidden_event_root(root), root)
+        self.assertIn(("withdraw", ()), root.calls)
+        self.assertIn(("title", ("",)), root.calls)
+        self.assertIn(("geometry", ("1x1+-32000+-32000",)), root.calls)
+        self.assertIn(("overrideredirect", (True,)), root.calls)
+        self.assertIn(("attributes", ("-alpha", 0.0)), root.calls)
+        self.assertTrue(
+            any(call[0] == "after" and call[1][0] == 0 for call in root.calls),
+            "hidden root should be withdrawn again after Tk enters the event loop",
+        )
+
+
+class ControlBridgeTests(unittest.TestCase):
+    def _json_response(self, command: str) -> dict:
+        return json.loads(bubble_dictate.handle_control_command(command))
+
+    class ChunkedSocket:
+        def __init__(self, payload: bytes, chunk_size: int = 8) -> None:
+            self.payload = payload
+            self.chunk_size = chunk_size
+            self.offset = 0
+
+        def settimeout(self, _timeout: float) -> None:
+            pass
+
+        def recv(self, _size: int) -> bytes:
+            if self.offset >= len(self.payload):
+                return b""
+            next_offset = min(len(self.payload), self.offset + self.chunk_size)
+            chunk = self.payload[self.offset:next_offset]
+            self.offset = next_offset
+            return chunk
+
+    def test_read_control_command_reads_large_json_until_newline(self) -> None:
+        payload = json.dumps({"cmd": "get-settings", "args": {"padding": "x" * 3000}})
+        fake_socket = self.ChunkedSocket((payload + "\n").encode("utf-8"), chunk_size=257)
+
+        self.assertEqual(bubble_dictate.read_control_command(fake_socket), payload)
+
+    def test_read_control_command_accepts_client_close_without_newline(self) -> None:
+        payload = json.dumps({"cmd": "get-state", "args": {}})
+        fake_socket = self.ChunkedSocket(payload.encode("utf-8"), chunk_size=5)
+
+        self.assertEqual(bubble_dictate.read_control_command(fake_socket), payload)
+
+    def test_read_control_command_rejects_oversized_payload(self) -> None:
+        fake_socket = self.ChunkedSocket(b"x" * 40, chunk_size=10)
+
+        with self.assertRaises(ValueError):
+            bubble_dictate.read_control_command(fake_socket, max_bytes=32)
+
+    def test_legacy_control_commands_still_return_plain_ok_or_error(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        bubble_dictate.root = FakeRoot()
+        try:
+            self.assertEqual(bubble_dictate.handle_control_command("toggle-record"), "ok")
+            self.assertEqual(bubble_dictate.handle_control_command("show-history"), "ok")
+            self.assertEqual(bubble_dictate.handle_control_command("unknown"), "error")
+        finally:
+            bubble_dictate.root = original_root
+
+        self.assertEqual([call[1] for call in calls], [bubble_dictate.toggle_recording_from_shortcut, bubble_dictate.show_history_panel])
+
+    def test_json_control_rejects_invalid_json_and_unknown_commands(self) -> None:
+        invalid = self._json_response("{not json")
+        unknown = self._json_response(json.dumps({"cmd": "delete-everything", "args": {}}))
+
+        self.assertFalse(invalid["ok"])
+        self.assertIn("Invalid JSON", invalid["error"])
+        self.assertFalse(unknown["ok"])
+        self.assertIn("Unknown command", unknown["error"])
+
+    def test_json_control_get_settings_returns_validated_settings(self) -> None:
+        with patch.object(
+            bubble_dictate,
+            "SETTINGS",
+            {**bubble_dictate.settings.DEFAULT_SETTINGS, "language": "Arabic", "opacity": 88},
+        ):
+            response = self._json_response(json.dumps({"cmd": "get-settings", "args": {}}))
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["language"], "Arabic")
+        self.assertEqual(response["data"]["opacity"], 88)
+        self.assertIn("custom_models", response["data"])
+
+    def test_json_control_get_history_returns_newest_entries_first(self) -> None:
+        entries = [
+            bubble_dictate.TranscriptHistoryEntry("old", "2026-06-16T10:00:00"),
+            bubble_dictate.TranscriptHistoryEntry("new", "2026-06-16T11:00:00"),
+        ]
+
+        with patch.object(bubble_dictate, "load_transcript_history_entries", return_value=entries):
+            response = self._json_response(json.dumps({"cmd": "get-history", "args": {}}))
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(
+            response["data"],
+            [
+                {"text": "new", "created_at": "2026-06-16T11:00:00"},
+                {"text": "old", "created_at": "2026-06-16T10:00:00"},
+            ],
+        )
+
+    def test_json_control_list_models_respects_requested_order(self) -> None:
+        response = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Accuracy"}}))
+
+        self.assertTrue(response["ok"])
+        tiers = [item["tier"] for item in response["data"]]
+        self.assertEqual(tiers[0], "High Accuracy")
+        self.assertEqual(tiers[-1], "Ultra Fast English")
+        self.assertIn("speed_rank", response["data"][0])
+        self.assertIn("accuracy_rank", response["data"][0])
+
+    def test_json_control_get_state_returns_current_status(self) -> None:
+        original = (
+            bubble_dictate.recording,
+            bubble_dictate.transcribing,
+            bubble_dictate.waiting_for_target_click,
+            bubble_dictate.latest_transcript,
+            dict(bubble_dictate.SETTINGS),
+        )
+        try:
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+                bubble_dictate.waiting_for_target_click = True
+                bubble_dictate.latest_transcript = "Ready text"
+            bubble_dictate.SETTINGS["model"] = "Fast"
+            bubble_dictate.SETTINGS["language"] = "Arabic"
+
+            response = self._json_response(json.dumps({"cmd": "get-state", "args": {}}))
+        finally:
+            with bubble_dictate.state_lock:
+                (
+                    bubble_dictate.recording,
+                    bubble_dictate.transcribing,
+                    bubble_dictate.waiting_for_target_click,
+                    bubble_dictate.latest_transcript,
+                ) = original[:4]
+            bubble_dictate.SETTINGS = original[4]
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["status"], "paste-ready")
+        self.assertEqual(response["data"]["latestTranscript"], "Ready text")
+        self.assertEqual(response["data"]["activeModel"], "Fast")
+        self.assertEqual(response["data"]["activeLanguage"], "Arabic")
+
+    def test_json_control_health_returns_backend_metadata(self) -> None:
+        original_owner = bubble_dictate.backend_owner
+        original_start = bubble_dictate.backend_started_monotonic
+        try:
+            bubble_dictate.backend_owner = "api"
+            bubble_dictate.backend_started_monotonic = bubble_dictate.time.monotonic() - 12.5
+
+            response = self._json_response(json.dumps({"cmd": "health", "args": {}}))
+        finally:
+            bubble_dictate.backend_owner = original_owner
+            bubble_dictate.backend_started_monotonic = original_start
+
+        self.assertTrue(response["ok"])
+        data = response["data"]
+        self.assertEqual(data["pid"], bubble_dictate.os.getpid())
+        self.assertEqual(data["status"], "idle")
+        self.assertEqual(data["protocol_version"], 4)
+        self.assertEqual(data["backend_owner"], "api")
+        self.assertEqual(data["model"], bubble_dictate.SETTINGS["model"])
+        self.assertEqual(data["language"], bubble_dictate.SETTINGS["language"])
+        self.assertIn("device", data)
+        self.assertGreaterEqual(data["uptime_seconds"], 12)
+
+    def test_json_control_backend_owner_returns_launch_mode(self) -> None:
+        original_owner = bubble_dictate.backend_owner
+        try:
+            bubble_dictate.backend_owner = "resident"
+            response = self._json_response(json.dumps({"cmd": "backend-owner", "args": {}}))
+        finally:
+            bubble_dictate.backend_owner = original_owner
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], "resident")
+
+    def test_json_control_shutdown_backend_schedules_fast_shutdown_path(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        bubble_dictate.root = FakeRoot()
+        try:
+            response = self._json_response(json.dumps({"cmd": "shutdown-backend", "args": {}}))
+        finally:
+            bubble_dictate.root = original_root
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"accepted": True})
+        self.assertEqual(calls, [(0, bubble_dictate.quit_app)])
+
+    def test_json_control_set_settings_saves_validated_settings(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+        requested = {
+            **bubble_dictate.settings.DEFAULT_SETTINGS,
+            "language": "Arabic",
+            "model": original_settings.get("model", "Balanced"),
+            "opacity": 90,
+        }
+
+        try:
+            with (
+                patch.object(bubble_dictate, 'model', object()),
+                patch.object(bubble_dictate.settings, "save_settings") as save_settings,
+                patch.object(bubble_dictate, "start_hotkey_listener", return_value=None) as restart_hotkey,
+                patch.object(bubble_dictate, "redraw_bubble_current_state") as redraw,
+                patch.object(bubble_dictate, "refresh_settings_panel") as refresh,
+            ):
+                response = self._json_response(json.dumps({"cmd": "set-settings", "args": {"settings": requested}}))
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["language"], "Arabic")
+        self.assertEqual(response["data"]["opacity"], 90)
+        save_settings.assert_called_once()
+        if response['data']['hotkey'] != original_settings['hotkey']:
+            restart_hotkey.assert_called_once_with(response['data']['hotkey'], strict=True)
+        else:
+            restart_hotkey.assert_not_called()
+        redraw.assert_called_once()
+        refresh.assert_called_once()
+
+    def test_json_control_set_settings_rejects_uncached_model_change(self) -> None:
+        original_settings = {**bubble_dictate.settings.DEFAULT_SETTINGS, "model": "Balanced"}
+        requested = {**original_settings, "model": "Fast"}
+
+        try:
+            bubble_dictate.SETTINGS = dict(original_settings)
+            with (
+                patch.object(bubble_dictate.config, "LOCAL_FILES_ONLY", True),
+                patch.object(bubble_dictate.settings, "model_is_available_locally", return_value=False),
+                patch.object(bubble_dictate.settings, "save_settings") as save_settings,
+            ):
+                response = self._json_response(json.dumps({"cmd": "set-settings", "args": {"settings": requested}}))
+        finally:
+            bubble_dictate.SETTINGS = bubble_dictate.settings.load_settings()
+
+        self.assertFalse(response["ok"])
+        self.assertIn("not installed locally", response["error"])
+        save_settings.assert_not_called()
+
+    def test_json_control_start_stop_toggle_recording_schedule_tk_callbacks(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay, callback) -> None:
+                calls.append((delay, callback))
+
+        original_root = bubble_dictate.root
+        original_state = (bubble_dictate.recording, bubble_dictate.transcribing)
+        original_resources = (bubble_dictate.model, bubble_dictate.audio_stream)
+        bubble_dictate.model, bubble_dictate.audio_stream = object(), object()
+        bubble_dictate.root = FakeRoot()
+        try:
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+            start = self._json_response(json.dumps({"cmd": "start-recording", "args": {}}))
+
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = True
+                bubble_dictate.transcribing = False
+            stop = self._json_response(json.dumps({"cmd": "stop-recording", "args": {}}))
+
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording = False
+                bubble_dictate.transcribing = False
+            toggle = self._json_response(json.dumps({"cmd": "toggle-recording", "args": {}}))
+        finally:
+            bubble_dictate.root = original_root
+            bubble_dictate.model, bubble_dictate.audio_stream = original_resources
+            with bubble_dictate.state_lock:
+                bubble_dictate.recording, bubble_dictate.transcribing = original_state
+
+        self.assertTrue(start["ok"])
+        self.assertTrue(stop["ok"])
+        self.assertTrue(toggle["ok"])
+        self.assertEqual([call[0] for call in calls], [0, 0, 0])
+
+    def test_json_control_clear_history_writes_empty_history_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            history_path = Path(temp_dir) / "history.json"
+            history_path.write_text(json.dumps([{"text": "old"}]), encoding="utf-8")
+
+            with patch.object(bubble_dictate.config, "TRANSCRIPT_HISTORY_FILE", history_path):
+                response = self._json_response(json.dumps({"cmd": "clear-history", "args": {}}))
+
+            self.assertTrue(response["ok"])
+            self.assertEqual(response["data"], [])
+            self.assertEqual(json.loads(history_path.read_text(encoding="utf-8")), [])
+
+    def test_json_control_export_history_writes_requested_format(self) -> None:
+        entries = [bubble_dictate.TranscriptHistoryEntry("hello", "2026-06-16T10:35:00")]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            requested = {
+                **bubble_dictate.settings.DEFAULT_SETTINGS,
+                "save_location": temp_dir,
+            }
+            with (
+                patch.object(bubble_dictate, "load_transcript_history_entries", return_value=entries),
+                patch.object(bubble_dictate, "SETTINGS", requested),
+            ):
+                txt = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "txt"}}))
+                md = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "md"}}))
+
+            self.assertTrue(txt["ok"])
+            self.assertTrue(md["ok"])
+            self.assertTrue(Path(txt["data"]).exists())
+            self.assertTrue(Path(md["data"]).exists())
+            self.assertEqual(Path(txt["data"]).suffix, ".txt")
+            self.assertEqual(Path(md["data"]).suffix, ".md")
+
+    def test_json_control_export_history_rejects_empty_history(self) -> None:
+        with patch.object(bubble_dictate, "load_transcript_history_entries", return_value=[]):
+            response = self._json_response(json.dumps({"cmd": "export-history", "args": {"format": "txt"}}))
+
+        self.assertFalse(response["ok"])
+        self.assertIn("No history", response["error"])
+
+    def test_json_control_download_model_tracks_background_status(self) -> None:
+        original_status = dict(getattr(bubble_dictate, "model_download_status", {}))
+
+        class ImmediateThread:
+            def __init__(self, target, daemon=False) -> None:
+                self.target = target
+                self.daemon = daemon
+
+            def start(self) -> None:
+                self.target()
+
+        try:
+            bubble_dictate.model_download_status = {}
+            with (
+                patch.object(bubble_dictate, "download_model_for_choice", return_value="ok") as download,
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = self._json_response(json.dumps({"cmd": "download-model", "args": {"choice": "Fast"}}))
+                models = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Speed"}}))
+        finally:
+            bubble_dictate.model_download_status = original_status
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"choice": "Fast", "status": "downloading"})
+        download.assert_called_once()
+        fast = next(item for item in models["data"] if item["tier"] == "Fast")
+        self.assertIn(fast["download_status"], {"idle", "installed"})
+
+    def test_json_control_download_model_failure_records_error_status(self) -> None:
+        original_status = dict(getattr(bubble_dictate, "model_download_status", {}))
+        original_details = bubble_dictate.settings.model_tier_details
+
+        class ImmediateThread:
+            def __init__(self, target, daemon=False) -> None:
+                self.target = target
+                self.daemon = daemon
+
+            def start(self) -> None:
+                self.target()
+
+        def unavailable_fast_details(choice, *args, **kwargs):
+            details = dict(original_details(choice, *args, **kwargs))
+            if choice == "Fast":
+                details["available"] = False
+            return details
+
+        try:
+            bubble_dictate.model_download_status = {}
+            with (
+                patch.object(bubble_dictate, "download_model_for_choice", side_effect=RuntimeError("network failed")),
+                patch.object(bubble_dictate.settings, "model_tier_details", side_effect=unavailable_fast_details),
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = self._json_response(json.dumps({"cmd": "download-model", "args": {"choice": "Fast"}}))
+                models = self._json_response(json.dumps({"cmd": "list-models", "args": {"order": "Speed"}}))
+        finally:
+            bubble_dictate.model_download_status = original_status
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"], {"choice": "Fast", "status": "downloading"})
+        fast = next(item for item in models["data"] if item["tier"] == "Fast")
+        self.assertEqual(fast["download_status"], "error")
+        self.assertIn("network failed", fast["download_error"])
+
+    def test_json_control_model_path_actions_return_paths(self) -> None:
+        with (
+            patch.object(bubble_dictate.os, "startfile") as startfile,
+            patch.object(bubble_dictate.pyperclip, "copy") as copy,
+        ):
+            opened = self._json_response(json.dumps({"cmd": "open-model-folder", "args": {"choice": "Fast"}}))
+            copied = self._json_response(json.dumps({"cmd": "copy-model-path", "args": {"choice": "Fast"}}))
+
+        self.assertTrue(opened["ok"])
+        self.assertTrue(copied["ok"])
+        self.assertIsInstance(opened["data"], str)
+        self.assertIsInstance(copied["data"], str)
+        startfile.assert_called_once()
+        copy.assert_called_once_with(copied["data"])
+
+    def test_json_control_add_custom_model_accepts_repo_and_rejects_invalid(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+
+        try:
+            bubble_dictate.SETTINGS = dict(bubble_dictate.settings.DEFAULT_SETTINGS)
+            with patch.object(bubble_dictate.settings, "save_settings") as save_settings:
+                accepted = self._json_response(
+                    json.dumps(
+                        {
+                            "cmd": "add-custom-model",
+                            "args": {"name": "Custom Repo", "source": "owner/model-name"},
+                        }
+                    )
+                )
+                rejected = self._json_response(
+                    json.dumps(
+                        {
+                            "cmd": "add-custom-model",
+                            "args": {"name": "Broken", "source": "not a repo or folder"},
+                        }
+                    )
+                )
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        self.assertTrue(accepted["ok"])
+        self.assertEqual(accepted["data"]["custom_models"], [{"name": "Custom Repo", "source": "owner/model-name"}])
+        self.assertFalse(rejected["ok"])
+        self.assertIn("valid Hugging Face repo", rejected["error"])
+        save_settings.assert_called_once()
+
+
+class ShortcutSpecTests(unittest.TestCase):
+    def test_build_shortcut_specs_returns_expected_shortcuts(self) -> None:
+        specs = bubble_dictate.build_shortcut_specs(
+            project_dir=Path(r"C:\local-dictation"),
+            desktop_dir=Path(r"C:\dictation-test-profile\Desktop"),
+            programs_dir=Path(r"C:\dictation-test-profile\AppData\Roaming\Microsoft\Windows\Start Menu\Programs"),
+            startup_dir=Path(r"C:\dictation-test-profile\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"),
+            pythonw_path=Path(r"C:\local-dictation\.venv\Scripts\pythonw.exe"),
+        )
+
+        by_name = {spec.name: spec for spec in specs}
+
+        self.assertEqual(
+            by_name["desktop-toggle"].shortcut_path,
+            Path(r"C:\dictation-test-profile\Desktop\Local Dictation Toggle.lnk"),
+        )
+        self.assertEqual(
+            by_name["desktop-toggle"].arguments,
+            '"C:\\local-dictation\\bubble_dictate.py" --toggle-record',
+        )
+        self.assertEqual(
+            by_name["desktop-history"].arguments,
+            '"C:\\local-dictation\\bubble_dictate.py" --show-history',
+        )
+        self.assertEqual(
+            by_name["startup-resident"].arguments,
+            '"C:\\local-dictation\\bubble_dictate.py" --resident',
+        )
+
+    def test_resolve_pythonw_path_prefers_project_venv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_dir = Path(temp_dir)
+            venv_pythonw = project_dir / ".venv" / "Scripts" / "pythonw.exe"
+            venv_pythonw.parent.mkdir(parents=True)
+            venv_pythonw.write_text("", encoding="utf-8")
+
+            self.assertEqual(
+                bubble_dictate.resolve_pythonw_path(
+                    current_python=Path(r"C:\Python312\python.exe"),
+                    project_dir=project_dir,
+                ),
+                venv_pythonw,
+            )
+
+
+class BubbleCloseGestureTests(unittest.TestCase):
+    def test_left_hold_for_two_seconds_requests_quit(self) -> None:
+        self.assertTrue(
+            bubble_dictate.should_quit_from_left_hold(
+                hold_seconds=2.0,
+                moved=False,
+                still_pressed=True,
+            )
+        )
+
+    def test_left_hold_under_two_seconds_does_not_quit(self) -> None:
+        self.assertFalse(
+            bubble_dictate.should_quit_from_left_hold(
+                hold_seconds=1.99,
+                moved=False,
+                still_pressed=True,
+            )
+        )
+
+    def test_left_hold_with_drag_does_not_quit(self) -> None:
+        self.assertFalse(
+            bubble_dictate.should_quit_from_left_hold(
+                hold_seconds=2.5,
+                moved=True,
+                still_pressed=True,
+            )
+        )
+
+
+class BubbleEventBindingTests(unittest.TestCase):
+    def test_bubble_events_include_right_click_release_quick_history(self) -> None:
+        class FakeWidget:
+            def __init__(self) -> None:
+                self.bindings = {}
+
+            def bind(self, sequence, handler) -> None:
+                self.bindings[sequence] = handler
+
+        app = FakeWidget()
+        label = FakeWidget()
+
+        bubble_dictate.bind_bubble_events(app, label)
+
+        for widget in [app, label]:
+            self.assertIn("<ButtonPress-1>", widget.bindings)
+            self.assertIn("<B1-Motion>", widget.bindings)
+            self.assertIn("<ButtonRelease-1>", widget.bindings)
+            self.assertIs(
+                widget.bindings["<ButtonRelease-3>"],
+                bubble_dictate.show_quick_history_popover,
+            )
+            self.assertIs(
+                widget.bindings["<ButtonRelease-2>"],
+                bubble_dictate.show_quick_history_popover,
+            )
+
+
+class BubbleReleaseDebounceTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.last_bubble_release_at = None
+
+    def test_duplicate_bubble_release_is_debounced(self) -> None:
+        self.assertFalse(bubble_dictate.should_ignore_bubble_release(now=10.0))
+        self.assertTrue(bubble_dictate.should_ignore_bubble_release(now=10.05))
+        self.assertFalse(
+            bubble_dictate.should_ignore_bubble_release(
+                now=10.0 + bubble_dictate.config.BUBBLE_RELEASE_DEBOUNCE_SECONDS + 0.01,
+            )
+        )
+
+
+class GlobalClickSuppressionTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.ignore_global_left_click_until = 0.0
+        bubble_dictate.recording = False
+        bubble_dictate.transcribing = False
+        bubble_dictate.waiting_for_target_click = False
+
+    def test_recent_bubble_left_click_suppresses_global_click(self) -> None:
+        bubble_dictate.remember_bubble_left_click(now=10.0)
+
+        self.assertTrue(bubble_dictate.should_ignore_global_left_click(now=10.1))
+        self.assertFalse(
+            bubble_dictate.should_ignore_global_left_click(
+                now=10.0 + bubble_dictate.config.BUBBLE_GLOBAL_CLICK_IGNORE_SECONDS + 0.01,
+            )
+        )
+
+    def test_global_click_does_not_fast_paste_during_bubble_click_suppression(self) -> None:
+        bubble_dictate.recording = True
+        bubble_dictate.transcribing = False
+        bubble_dictate.waiting_for_target_click = False
+        bubble_dictate.ignore_global_left_click_until = 999999.0
+
+        with patch.object(bubble_dictate, "click_is_inside_bubble", return_value=False), patch.object(
+            bubble_dictate,
+            "stop_recording",
+            side_effect=AssertionError("recording should not stop"),
+        ):
+            bubble_dictate.on_global_mouse_click(
+                999,
+                999,
+                bubble_dictate.mouse.Button.left,
+                False,
+            )
+
+    def test_global_click_while_recording_does_not_stop_or_fast_paste(self) -> None:
+        bubble_dictate.recording = True
+        bubble_dictate.transcribing = False
+        bubble_dictate.waiting_for_target_click = False
+        bubble_dictate.ignore_global_left_click_until = 0.0
+
+        with patch.object(bubble_dictate, "click_is_inside_bubble", return_value=False), patch.object(
+            bubble_dictate,
+            "stop_recording",
+            side_effect=AssertionError("recording should not stop"),
+        ), patch.object(
+            bubble_dictate.threading.Thread,
+            "start",
+            side_effect=AssertionError("paste thread should not start"),
+        ):
+            bubble_dictate.on_global_mouse_click(
+                999,
+                999,
+                bubble_dictate.mouse.Button.left,
+                True,
+            )
+
+        self.assertTrue(bubble_dictate.recording)
+        self.assertFalse(bubble_dictate.waiting_for_target_click)
+
+    def test_global_click_after_transcription_still_pastes_ready_text(self) -> None:
+        bubble_dictate.recording = False
+        bubble_dictate.transcribing = False
+        bubble_dictate.waiting_for_target_click = True
+        bubble_dictate.ignore_global_left_click_until = 0.0
+
+        started = []
+
+        class FakeThread:
+            def __init__(self, target, daemon, kwargs=None) -> None:
+                self.target = target
+                self.daemon = daemon
+                self.kwargs = kwargs
+
+            def start(self) -> None:
+                started.append((self.target, self.daemon, self.kwargs))
+
+        with patch.object(bubble_dictate, "click_is_inside_bubble", return_value=False), patch.object(
+            bubble_dictate.threading,
+            "Thread",
+            FakeThread,
+        ):
+            bubble_dictate.on_global_mouse_click(
+                999,
+                999,
+                bubble_dictate.mouse.Button.left,
+                False,
+            )
+
+        self.assertEqual(
+            started,
+            [(bubble_dictate.paste_after_target_click, True, {"click_point": (999, 999)})],
+        )
+
+
+class QuickHistoryPopoverBindingTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.last_quick_history_request_at = 0.0
+
+    def test_quick_popover_closes_on_escape_not_focus_out(self) -> None:
+        class FakePopover:
+            def __init__(self) -> None:
+                self.bindings = {}
+
+            def bind(self, sequence, handler) -> None:
+                self.bindings[sequence] = handler
+
+        popover = FakePopover()
+
+        bubble_dictate.bind_quick_popover_close_events(popover)
+
+        self.assertIn("<Escape>", popover.bindings)
+        self.assertNotIn("<FocusOut>", popover.bindings)
+
+    def test_quick_history_duplicate_click_is_debounced(self) -> None:
+        self.assertFalse(bubble_dictate.should_ignore_quick_history_request(now=10.0))
+        self.assertTrue(bubble_dictate.should_ignore_quick_history_request(now=10.1))
+        self.assertFalse(
+            bubble_dictate.should_ignore_quick_history_request(
+                now=10.0 + bubble_dictate.config.QUICK_HISTORY_DEBOUNCE_SECONDS + 0.01,
+            )
+        )
+
+    def test_quick_history_layout_keeps_third_row_buttons_above_footer(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+        third_row_y = layout["row_top"] + (bubble_dictate.config.QUICK_HISTORY_LIMIT - 1) * layout["row_height"]
+        third_button_bottom = third_row_y + layout["button_y_offset"] + layout["button_height"]
+
+        self.assertLess(third_button_bottom, layout["footer_separator_y"])
+
+    def test_quick_history_layout_keeps_buttons_inside_right_padding(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertLessEqual(
+            layout["copy_x"] + layout["button_width"],
+            bubble_dictate.config.QUICK_HISTORY_WIDTH - layout["panel_pad"] - 14,
+        )
+        self.assertLess(
+            layout["text_x"] + layout["transcript_width"],
+            layout["copy_x"] - 18,
+        )
+        self.assertIn("copy_icon_x", layout)
+        self.assertNotIn("paste_x", layout)
+
+    def test_quick_history_preview_is_clamped_to_two_lines(self) -> None:
+        lines = bubble_dictate.quick_history_preview_lines(
+            "I want to create a skill for codex and clones. The skill is for people in that workflow.",
+            max_lines=2,
+            max_line_chars=28,
+        )
+
+        self.assertLessEqual(len(lines), 2)
+        self.assertTrue(lines[-1].endswith("..."))
+        self.assertTrue(all(len(line) <= 28 for line in lines))
+
+    def test_quick_history_pointer_is_inside_panel_right_edge(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertGreater(layout["pointer_tip_x"], bubble_dictate.config.QUICK_HISTORY_WIDTH - 70)
+        self.assertLessEqual(layout["pointer_base_right"], bubble_dictate.config.QUICK_HISTORY_WIDTH - layout["panel_pad"])
+        self.assertGreater(layout["pointer_base_left"], layout["pointer_tip_x"] - 30)
+
+    def test_quick_history_layout_is_compact_and_prevents_text_overlap(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertLessEqual(bubble_dictate.config.QUICK_HISTORY_WIDTH, 410)
+        self.assertLessEqual(bubble_dictate.config.QUICK_HISTORY_HEIGHT, 290)
+        self.assertLessEqual(layout["button_width"], 36)
+        self.assertLessEqual(layout["time_font_size"], 10)
+        self.assertLessEqual(layout["transcript_font_size"], 12)
+        self.assertGreaterEqual(layout["transcript_width"], 300)
+        self.assertLess(layout["footer_separator_y"], layout["footer_y"])
+        self.assertLessEqual(
+            layout["pointer_base_right"] - layout["pointer_base_left"],
+            16,
+        )
+        self.assertLessEqual(
+            bubble_dictate.config.QUICK_HISTORY_POINTER_SIZE,
+            12,
+        )
+
+        estimated_line_width = int(layout["preview_line_chars"] * layout["transcript_font_size"] * 0.58)
+        self.assertLessEqual(
+            layout["text_x"] + estimated_line_width,
+            layout["copy_x"] - 18,
+        )
+
+        transcript_text_bottom = (
+            layout["row_top"]
+            + layout["transcript_y_offset"]
+            + layout["transcript_line_gap"]
+            + int(layout["transcript_font_size"] * 1.4)
+        )
+        self.assertGreaterEqual(
+            layout["row_top"] + layout["row_separator_offset"],
+            transcript_text_bottom + 10,
+        )
+
+    def test_quick_history_layout_uses_safe_two_line_rows(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertEqual(layout.get("preview_max_lines"), 2)
+        self.assertLessEqual(bubble_dictate.config.QUICK_HISTORY_POINTER_SIZE, 12)
+        self.assertLessEqual(
+            layout["pointer_base_right"] - layout["pointer_base_left"],
+            16,
+        )
+        self.assertGreaterEqual(layout["copy_icon_size"], 15)
+        self.assertGreaterEqual(layout["button_width"], 34)
+
+    def test_quick_history_preview_uses_pixel_width_and_two_lines(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+        text = "I was just born playing the guitar But all the tricks wasn't too hard"
+
+        lines = bubble_dictate.wrap_text_to_pixel_lines(
+            text,
+            max_lines=layout["preview_max_lines"],
+            max_width=layout["transcript_width"],
+            measure=lambda value: len(value) * 7,
+        )
+
+        preview = " ".join(lines)
+        self.assertLessEqual(len(lines), 2)
+        self.assertIn("guitar", preview)
+        self.assertIn("tricks", preview)
+        self.assertNotEqual(preview, "I was just born playing t...")
+        self.assertTrue(all(len(line) * 7 <= layout["transcript_width"] for line in lines))
+
+    def test_quick_history_layout_keeps_play_bubble_visually_attached(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertLessEqual(layout.get("bubble_gap", 99), 3)
+
+    def test_quick_history_pointer_uses_smooth_compact_tail_geometry(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        self.assertTrue(layout.get("pointer_smooth"))
+        self.assertEqual(layout.get("tail_renderer"), "pillow")
+        self.assertEqual(layout.get("tail_shape"), "soft-rounded")
+        self.assertGreaterEqual(layout.get("tail_curve_radius", 0), 3)
+        self.assertLessEqual(layout.get("pointer_tip_y_offset", 99), 10)
+        self.assertLessEqual(
+            layout["pointer_base_right"] - layout["pointer_base_left"],
+            16,
+        )
+
+    @unittest.skipUnless(bubble_dictate.icons.PIL_AVAILABLE, "Pillow unavailable")
+    def test_quick_history_background_renderer_returns_antialiased_rgba_tail(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+        image = bubble_dictate.render_quick_popover_background(
+            bubble_dictate.config.QUICK_HISTORY_WIDTH,
+            bubble_dictate.config.QUICK_HISTORY_HEIGHT,
+            layout,
+            {
+                "panel_bg": "#080c12",
+                "panel_border": "#4b5563",
+                "inner_border": "#202936",
+            },
+        )
+
+        self.assertEqual(image.mode, "RGBA")
+        self.assertEqual(
+            image.size,
+            (bubble_dictate.config.QUICK_HISTORY_WIDTH, bubble_dictate.config.QUICK_HISTORY_HEIGHT),
+        )
+        self.assertEqual(image.getpixel((0, 0))[3], 0)
+        self.assertGreater(image.getpixel((layout["pointer_tip_x"], layout["pointer_tip_y"]))[3], 0)
+
+
+class BubbleIconTests(unittest.TestCase):
+    def test_ready_and_recording_states_use_shape_icons(self) -> None:
+        self.assertEqual(
+            bubble_dictate.bubble_icon_for_state(bubble_dictate.config.READY_LABEL),
+            "play",
+        )
+        self.assertEqual(
+            bubble_dictate.bubble_icon_for_state(bubble_dictate.config.RECORDING_LABEL),
+            "stop",
+        )
+
+
+class DiagnosticLoggingTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.session_log_file = None
+
+    def test_initialize_logging_writes_legacy_and_session_logs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            legacy_log = temp_path / "dictation_debug.log"
+            log_dir = temp_path / "logs"
+
+            session_log = bubble_dictate.initialize_logging(
+                log_dir=log_dir,
+                legacy_log_file=legacy_log,
+                started_at=bubble_dictate.datetime(2026, 6, 14, 12, 0, 0),
+                pid=1234,
+            )
+            bubble_dictate.log(
+                "diagnostic hello",
+                timestamp=bubble_dictate.datetime(2026, 6, 14, 12, 0, 1),
+                pid=1234,
+                legacy_log_file=legacy_log,
+            )
+
+            self.assertEqual(
+                session_log,
+                log_dir / "dictation_20260614_120000_pid1234.log",
+            )
+            self.assertIn("diagnostic hello", legacy_log.read_text(encoding="utf-8"))
+            self.assertIn("diagnostic hello", session_log.read_text(encoding="utf-8"))
+
+    def test_prune_old_session_logs_keeps_newest_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_dir = Path(temp_dir)
+            old = log_dir / "dictation_20260614_120000_pid1.log"
+            middle = log_dir / "dictation_20260614_120100_pid1.log"
+            newest = log_dir / "dictation_20260614_120200_pid1.log"
+
+            for index, path in enumerate([old, middle, newest], start=1):
+                path.write_text(str(index), encoding="utf-8")
+                os_time = 1000 + index
+                path.touch()
+                bubble_dictate.os.utime(path, (os_time, os_time))
+
+            bubble_dictate.prune_old_session_logs(log_dir, keep_count=2)
+
+            self.assertFalse(old.exists())
+            self.assertTrue(middle.exists())
+            self.assertTrue(newest.exists())
+
+    def test_recording_stop_diagnostics_identifies_immediate_zero_chunk_stop(self) -> None:
+        diagnostic = bubble_dictate.recording_stop_diagnostic_summary(
+            session_id=7,
+            stop_reason="bubble-left-click",
+            duration_seconds=0.08,
+            chunks_captured=0,
+            callback_chunks=0,
+            callback_frames=0,
+            first_audio_delay=None,
+            last_audio_age=None,
+            status_events=[],
+        )
+
+        self.assertIn("session=7", diagnostic)
+        self.assertIn("duration=0.08s", diagnostic)
+        self.assertIn("chunks=0", diagnostic)
+        self.assertIn("likely-immediate-stop", diagnostic)
+
+    def test_recording_stop_diagnostics_identifies_no_audio_callbacks(self) -> None:
+        diagnostic = bubble_dictate.recording_stop_diagnostic_summary(
+            session_id=8,
+            stop_reason="bubble-left-click",
+            duration_seconds=1.2,
+            chunks_captured=0,
+            callback_chunks=0,
+            callback_frames=0,
+            first_audio_delay=None,
+            last_audio_age=None,
+            status_events=[],
+        )
+
+        self.assertIn("stream-delivered-no-callbacks", diagnostic)
+
+
+class LaunchLockTests(unittest.TestCase):
+    def test_try_create_launch_lock_rejects_fresh_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "launch.lock"
+
+            self.assertTrue(bubble_dictate.try_create_launch_lock(lock_path, now=100.0, pid=1))
+            self.assertFalse(bubble_dictate.try_create_launch_lock(lock_path, now=101.0, pid=2))
+
+    def test_try_create_launch_lock_replaces_stale_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock_path = Path(temp_dir) / "launch.lock"
+
+            self.assertTrue(bubble_dictate.try_create_launch_lock(lock_path, now=100.0, pid=1))
+            self.assertTrue(
+                bubble_dictate.try_create_launch_lock(
+                    lock_path,
+                    now=100.0 + bubble_dictate.config.LAUNCH_LOCK_STALE_SECONDS + 1.0,
+                    pid=2,
+                )
+            )
+            self.assertIn("pid=2", lock_path.read_text(encoding="utf-8"))
+
+
+class SafeConsolePrintTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.session_log_file = None
+
+    def test_log_survives_console_unicode_encode_error(self) -> None:
+        # Simulate a cp1252 console that cannot encode the paste check mark,
+        # which previously raised out of set_bubble and flipped the bubble
+        # into the error state after a successful paste.
+        def raising_print(*_args, **_kwargs):
+            raise UnicodeEncodeError("charmap", "✓", 0, 1, "undefined")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            legacy_log = Path(temp_dir) / "dictation_debug.log"
+
+            with patch("builtins.print", raising_print):
+                try:
+                    bubble_dictate.log(
+                        "Bubble state requested: text=✓ bg=#188038",
+                        legacy_log_file=legacy_log,
+                    )
+                except UnicodeEncodeError:
+                    self.fail("log() must not raise when the console cannot encode a glyph")
+
+            self.assertIn("✓", legacy_log.read_text(encoding="utf-8"))
+
+
+class BubbleErrorGlyphTests(unittest.TestCase):
+    def test_error_label_does_not_fall_back_to_text_icon(self) -> None:
+        # The error state is drawn as a vector glyph, not the generic text path.
+        self.assertEqual(
+            bubble_dictate.bubble_icon_for_state(bubble_dictate.config.ERROR_LABEL),
+            "text",
+        )
+
+    def test_lighten_color_returns_lighter_hex(self) -> None:
+        lighter = bubble_dictate.lighten_color("#1f6f4a")
+        self.assertTrue(lighter.startswith("#") and len(lighter) == 7)
+        self.assertNotEqual(lighter, "#1f6f4a")
+
+    def test_lighten_color_handles_bad_input(self) -> None:
+        self.assertEqual(bubble_dictate.lighten_color("nope"), "nope")
+
+
+class HotkeyTests(unittest.TestCase):
+    def test_valid_hotkey(self) -> None:
+        self.assertTrue(bubble_dictate.is_valid_hotkey("<ctrl>+<alt>+d"))
+
+    def test_blank_hotkey_is_invalid(self) -> None:
+        self.assertFalse(bubble_dictate.is_valid_hotkey("   "))
+
+    def test_garbage_hotkey_is_invalid(self) -> None:
+        self.assertFalse(bubble_dictate.is_valid_hotkey("not a key combo"))
+
+    def test_hotkey_capture_replaces_existing_text_with_single_key(self) -> None:
+        event = SimpleNamespace(keysym="g", char="g", state=0)
+
+        self.assertEqual(bubble_dictate.hotkey_from_key_event(event), "g")
+
+    def test_hotkey_capture_formats_ctrl_alt_combo(self) -> None:
+        event = SimpleNamespace(keysym="d", char="d", state=0x0004 | 0x0008)
+
+        self.assertEqual(bubble_dictate.hotkey_from_key_event(event), "<ctrl>+<alt>+d")
+
+    def test_hotkey_capture_can_clear_field(self) -> None:
+        event = SimpleNamespace(keysym="BackSpace", char="", state=0)
+
+        self.assertEqual(bubble_dictate.hotkey_from_key_event(event), "")
+
+
+class SettingsLayoutFooterTests(unittest.TestCase):
+    def test_quick_history_layout_has_compact_four_action_footer(self) -> None:
+        layout = bubble_dictate.quick_history_layout()
+
+        for key in ("settings_icon_x", "settings_x", "history_icon_x",
+                    "history_x", "tray_icon_x", "tray_x",
+                    "close_icon_x", "close_x",
+                    "footer_divider_x", "footer_divider2_x", "footer_divider3_x"):
+            self.assertIn(key, layout)
+
+        self.assertLess(layout["settings_x"], layout["history_x"])
+        self.assertLess(layout["history_x"], layout["tray_x"])
+        self.assertLess(layout["tray_x"], layout["close_x"])
+        self.assertLessEqual(layout["footer_font_size"], 10)
+        self.assertLessEqual(layout["footer_icon_size"], 14)
+        self.assertEqual(layout["footer_actions"], ["Settings", "History", "Tray", "Close app"])
+
+    def test_settings_layout_is_compact_premium_dialog(self) -> None:
+        layout = bubble_dictate.settings_panel_layout()
+
+        self.assertGreaterEqual(layout["width"], 560)
+        self.assertLessEqual(layout["width"], 640)
+        self.assertGreaterEqual(layout["height"], 600)
+        self.assertLessEqual(layout["height"], 640)
+        self.assertEqual(
+            layout["sections"],
+            ["Transcription", "Interface & Output", "Commands & Hotkeys"],
+        )
+        self.assertEqual(
+            layout["footer_actions"],
+            ["History", "Export", "Close app", "Save changes"],
+        )
+        self.assertEqual(layout["primary_action"], "Save changes")
+        self.assertGreater(layout["control_width"], layout["label_width"])
+
+    def test_settings_layout_removes_far_right_control_dead_zone(self) -> None:
+        layout = bubble_dictate.settings_panel_layout()
+
+        self.assertLessEqual(layout["width"], 640)
+        self.assertLessEqual(layout["height"], 640)
+        self.assertEqual(layout.get("control_alignment"), "left")
+        self.assertLessEqual(layout.get("control_start_x", 999), 240)
+        self.assertLessEqual(layout["section_pad_x"], 12)
+        self.assertGreaterEqual(layout.get("section_gap", 0), 8)
+        self.assertLessEqual(layout.get("close_button_size", 99), 24)
+
+    def test_settings_layout_reserves_space_for_hotkey_help_text(self) -> None:
+        layout = bubble_dictate.settings_panel_layout()
+
+        self.assertGreaterEqual(layout.get("commands_min_height", 0), 92)
+        self.assertLessEqual(layout.get("help_wraplength", 999), 520)
+        self.assertGreaterEqual(layout.get("help_reserved_lines", 0), 2)
+        self.assertGreaterEqual(layout.get("model_info_reserved_lines", 0), 2)
+        self.assertGreaterEqual(layout.get("model_info_font_size", 0), 8)
+        self.assertIn("model_folder_label_width", layout)
+        self.assertIn("model_order_label_width", layout)
+        self.assertGreaterEqual(layout.get("minimum_font_size", 0), 8)
+        self.assertGreaterEqual(layout.get("manual_model_font_size", 0), layout["minimum_font_size"])
+        self.assertGreaterEqual(layout.get("hotkey_help_font_size", 0), layout["minimum_font_size"])
+        self.assertGreaterEqual(layout.get("commands_min_height", 0), 112)
+
+    def test_settings_light_palette_is_soft_and_subdued(self) -> None:
+        original_theme = bubble_dictate.SETTINGS["theme"]
+        bubble_dictate.SETTINGS["theme"] = "Light Mode"
+        try:
+            palette = bubble_dictate.settings_visual_palette({})
+        finally:
+            bubble_dictate.SETTINGS["theme"] = original_theme
+
+        self.assertEqual(palette["panel_bg"], "#f8f7f3")
+        self.assertEqual(palette["row_ring"], "#e4ded2")
+        self.assertEqual(palette["accent_bg"], "#1f7f70")
+
+    def test_settings_drag_binding_reaches_nested_header_labels_not_buttons(self) -> None:
+        class FakeWidget:
+            def __init__(self, children=None) -> None:
+                self.children = children or []
+                self.bindings = {}
+
+            def bind(self, sequence, handler) -> None:
+                self.bindings[sequence] = handler
+
+            def winfo_children(self):
+                return self.children
+
+        class FakeButton(FakeWidget):
+            pass
+
+        title_label = FakeWidget()
+        subtitle_label = FakeWidget()
+        title_stack = FakeWidget([title_label, subtitle_label])
+        close_button = FakeButton()
+        close_shell = FakeWidget([close_button])
+        header = FakeWidget([title_stack, close_shell])
+
+        class FakeWindow:
+            def winfo_x(self) -> int:
+                return 100
+
+            def winfo_y(self) -> int:
+                return 200
+
+            def geometry(self, _value: str) -> None:
+                pass
+
+        with patch.object(bubble_dictate.tk, "Button", FakeButton):
+            bubble_dictate.bind_panel_drag(FakeWindow(), header)
+
+        for widget in (header, title_stack, title_label, subtitle_label, close_shell):
+            self.assertIn("<ButtonPress-1>", widget.bindings)
+            self.assertIn("<B1-Motion>", widget.bindings)
+
+        self.assertEqual(close_button.bindings, {})
+
+
+class SettingsApplyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_settings = dict(bubble_dictate.SETTINGS)
+
+    def tearDown(self) -> None:
+        bubble_dictate.SETTINGS = self.original_settings
+
+    def _vars(self, **overrides):
+        values = dict(bubble_dictate.SETTINGS)
+        values.update(overrides)
+
+        class Var:
+            def __init__(self, value) -> None:
+                self.value = value
+
+            def get(self):
+                return self.value
+
+            def set(self, value) -> None:
+                self.value = value
+
+        return {key: Var(value) for key, value in values.items() if key != "bubble_position"}
+
+    def test_apply_settings_saves_without_closing_settings_panel(self) -> None:
+        vars_ = self._vars(theme="Light Mode")
+
+        with patch.object(bubble_dictate.settings, "save_settings"), patch.object(
+            bubble_dictate, "restart_hotkey_listener"
+        ), patch.object(bubble_dictate, "redraw_bubble_current_state"), patch.object(
+            bubble_dictate, "close_settings_panel"
+        ) as close_panel, patch.object(
+            bubble_dictate, "refresh_settings_panel"
+        ) as refresh_panel:
+            bubble_dictate.apply_settings_from_form(vars_)
+
+        close_panel.assert_not_called()
+        refresh_panel.assert_called_once()
+        self.assertEqual(bubble_dictate.SETTINGS["theme"], "Light Mode")
+
+    def test_apply_settings_keeps_previous_model_when_offline_model_missing(self) -> None:
+        bubble_dictate.SETTINGS["model"] = "Balanced"
+        vars_ = self._vars(model="Fast")
+
+        with patch.object(bubble_dictate.settings, "model_is_available_locally", return_value=False), patch.object(
+            bubble_dictate.settings, "save_settings"
+        ), patch.object(bubble_dictate, "restart_hotkey_listener"), patch.object(
+            bubble_dictate, "redraw_bubble_current_state"
+        ), patch.object(bubble_dictate.threading.Thread, "start") as thread_start:
+            bubble_dictate.apply_settings_from_form(vars_)
+
+        self.assertEqual(bubble_dictate.SETTINGS["model"], "Balanced")
+        self.assertEqual(vars_["model"].get(), "Balanced")
+        thread_start.assert_not_called()
+
+    def test_apply_settings_preserves_custom_models(self) -> None:
+        custom_models = [{"name": "Repo Custom", "source": "Systran/faster-whisper-base"}]
+        bubble_dictate.SETTINGS["custom_models"] = custom_models
+        bubble_dictate.SETTINGS["model"] = "Repo Custom"
+        vars_ = self._vars(theme="Light Mode")
+        vars_.pop("custom_models", None)
+
+        with patch.object(bubble_dictate.settings, "save_settings"), patch.object(
+            bubble_dictate, "restart_hotkey_listener"
+        ), patch.object(bubble_dictate, "redraw_bubble_current_state"), patch.object(
+            bubble_dictate, "refresh_settings_panel"
+        ):
+            bubble_dictate.apply_settings_from_form(vars_)
+
+        self.assertEqual(bubble_dictate.SETTINGS["custom_models"], custom_models)
+        self.assertEqual(bubble_dictate.SETTINGS["model"], "Repo Custom")
+
+    def test_json_control_set_settings_reloads_model_when_device_mode_changes(self) -> None:
+        original_settings = dict(bubble_dictate.SETTINGS)
+        requested = {
+            **bubble_dictate.settings.DEFAULT_SETTINGS,
+            "model": original_settings.get("model", "Balanced"),
+            "device_mode": "cpu",
+        }
+
+        class ImmediateThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None) -> None:
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs or {}
+
+            def start(self) -> None:
+                if self.target:
+                    self.target(*self.args, **self.kwargs)
+
+        try:
+            bubble_dictate.SETTINGS = {**original_settings, "device_mode": "auto"}
+            with (
+                patch.object(bubble_dictate.settings, "save_settings"),
+                patch.object(bubble_dictate, "restart_hotkey_listener"),
+                patch.object(bubble_dictate, "redraw_bubble_current_state"),
+                patch.object(bubble_dictate, "refresh_settings_panel"),
+                patch.object(bubble_dictate, "build_model", return_value=(object(), "cpu")) as reload_model,
+                patch.object(bubble_dictate.threading, "Thread", ImmediateThread),
+            ):
+                response = bubble_dictate.handle_control_command(
+                    json.dumps({"cmd": "set-settings", "args": {"settings": requested}})
+                )
+        finally:
+            bubble_dictate.SETTINGS = original_settings
+
+        payload = json.loads(response)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["device_mode"], "cpu")
+        self.assertEqual(reload_model.call_args.args[0]['device_mode'], 'cpu')
+
+
+class ModelLoadingDeviceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_settings = dict(bubble_dictate.SETTINGS)
+        self.original_active_device = bubble_dictate.active_device
+
+    def tearDown(self) -> None:
+        bubble_dictate.SETTINGS = self.original_settings
+        bubble_dictate.active_device = self.original_active_device
+
+    def test_auto_device_tries_cuda_then_falls_back_to_cpu(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "auto"}
+        cuda_model = object()
+        cpu_model = object()
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model", return_value=cuda_model) as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model", return_value=cpu_model) as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", side_effect=[RuntimeError("cuda failed"), None]),
+        ):
+            loaded = bubble_dictate.load_model()
+
+        self.assertIs(loaded, cpu_model)
+        make_cuda.assert_called_once()
+        make_cpu.assert_called_once()
+        self.assertEqual(bubble_dictate.active_device, "cpu")
+
+    def test_cuda_device_does_not_fall_back_on_cuda_failure(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "cuda"}
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model", return_value=object()) as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model") as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", side_effect=RuntimeError("cuda failed")),
+        ):
+            with self.assertRaises(RuntimeError):
+                bubble_dictate.load_model()
+
+        make_cuda.assert_called_once()
+        make_cpu.assert_not_called()
+
+    def test_cpu_device_does_not_attempt_cuda(self) -> None:
+        bubble_dictate.SETTINGS = {**bubble_dictate.SETTINGS, "device_mode": "cpu"}
+        cpu_model = object()
+
+        with (
+            patch.object(bubble_dictate, "make_cuda_model") as make_cuda,
+            patch.object(bubble_dictate, "make_cpu_model", return_value=cpu_model) as make_cpu,
+            patch.object(bubble_dictate, "warm_up_model", return_value=None),
+        ):
+            loaded = bubble_dictate.load_model()
+
+        self.assertIs(loaded, cpu_model)
+        make_cuda.assert_not_called()
+        make_cpu.assert_called_once()
+        self.assertEqual(bubble_dictate.active_device, "cpu")
+
+
+class ModelDownloadTests(unittest.TestCase):
+    def test_missing_model_exposes_download_button_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state = bubble_dictate.model_download_button_state("Fast", cache_root=Path(temp_dir))
+
+        self.assertTrue(state["visible"])
+        self.assertTrue(state["enabled"])
+        self.assertEqual(state["text"], "Download")
+
+    def test_installed_model_disables_download_button_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_root = Path(temp_dir)
+            repo_dir = cache_root / "models--Systran--faster-whisper-small"
+            snapshot = repo_dir / "snapshots" / "abc123"
+            snapshot.mkdir(parents=True)
+            (repo_dir / "refs").mkdir()
+            (repo_dir / "refs" / "main").write_text("abc123", encoding="utf-8")
+            (snapshot / "model.bin").write_bytes(b"x")
+            for filename in ("config.json", "tokenizer.json", "vocabulary.json"):
+                (snapshot / filename).write_bytes(b"")
+
+            state = bubble_dictate.model_download_button_state("Fast", cache_root=cache_root)
+
+        self.assertTrue(state["visible"])
+        self.assertFalse(state["enabled"])
+        self.assertEqual(state["text"], "Installed")
+
+    def test_download_known_model_uses_faster_whisper_with_online_lookup_only_when_called(self) -> None:
+        calls = []
+
+        def fake_download_model(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "downloaded"
+
+        result = bubble_dictate.download_model_for_choice(
+            "Fast",
+            download_model_func=fake_download_model,
+        )
+
+        self.assertEqual(result, "downloaded")
+        self.assertEqual(calls[0][0][0], "small")
+        self.assertFalse(calls[0][1]["local_files_only"])
+
+    def test_download_custom_repo_uses_snapshot_download(self) -> None:
+        calls = []
+
+        def fake_snapshot_download(**kwargs):
+            calls.append(kwargs)
+            return "snapshot"
+
+        result = bubble_dictate.download_model_for_choice(
+            "Repo Custom",
+            custom_models=[{"name": "Repo Custom", "source": "Systran/faster-whisper-base"}],
+            snapshot_download_func=fake_snapshot_download,
+        )
+
+        self.assertEqual(result, "snapshot")
+        self.assertEqual(calls[0]["repo_id"], "Systran/faster-whisper-base")
+        self.assertFalse(calls[0]["local_files_only"])
+        self.assertIn("model.bin", calls[0]["allow_patterns"])
+
+
+class HistoryPanelLayoutTests(unittest.TestCase):
+    def test_history_panel_actions_are_copy_only(self) -> None:
+        layout = bubble_dictate.history_panel_layout()
+
+        self.assertEqual(layout["action_count"], 1)
+        self.assertIn("copy_icon_size", layout)
+        self.assertNotIn("paste_column", layout)
+
+
+class TrayTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.root = None
+        bubble_dictate.tray_icon = None
+        bubble_dictate.shutting_down = False
+        with bubble_dictate.state_lock:
+            bubble_dictate.recording = False
+            bubble_dictate.transcribing = False
+            bubble_dictate.waiting_for_target_click = False
+
+    def test_tray_status_maps_expected_states(self) -> None:
+        expected = {
+            "ready": ("play", bubble_dictate.config.READY_BG, "Ready"),
+            "recording": ("stop", bubble_dictate.config.RECORDING_BG, "Recording"),
+            "transcribing": ("ellipsis", bubble_dictate.config.TRANSCRIBING_BG, "Transcribing"),
+            "paste-ready": ("paste", bubble_dictate.config.PASTE_READY_BG, "Paste ready"),
+            "error": ("error", bubble_dictate.config.ERROR_BG, "Error"),
+        }
+
+        for state, (glyph, color, title_fragment) in expected.items():
+            with self.subTest(state=state):
+                status = bubble_dictate.tray_status_for_state(state)
+
+                self.assertEqual(status["glyph"], glyph)
+                self.assertEqual(status["bg"], color)
+                self.assertIn(title_fragment, status["title"])
+
+    def test_tray_state_tracks_current_app_state(self) -> None:
+        self.assertEqual(bubble_dictate.tray_state_from_bubble("anything", "#000000"), "ready")
+        self.assertEqual(
+            bubble_dictate.tray_state_from_bubble(
+                bubble_dictate.config.RECORDING_LABEL,
+                bubble_dictate.config.RECORDING_BG,
+            ),
+            "recording",
+        )
+        self.assertEqual(
+            bubble_dictate.tray_state_from_bubble(
+                bubble_dictate.config.TRANSCRIBING_LABEL,
+                bubble_dictate.config.TRANSCRIBING_BG,
+            ),
+            "transcribing",
+        )
+        self.assertEqual(
+            bubble_dictate.tray_state_from_bubble(
+                bubble_dictate.config.PASTE_READY_LABEL,
+                bubble_dictate.config.PASTE_READY_BG,
+            ),
+            "paste-ready",
+        )
+        self.assertEqual(
+            bubble_dictate.tray_state_from_bubble(
+                bubble_dictate.config.ERROR_LABEL,
+                bubble_dictate.config.ERROR_BG,
+            ),
+            "error",
+        )
+
+    def test_build_tray_menu_includes_core_actions_and_default_toggle(self) -> None:
+        fake_pystray = self._fake_pystray()
+
+        with patch.object(bubble_dictate, "pystray", fake_pystray):
+            menu = bubble_dictate.build_tray_menu()
+
+        items = [item for item in menu if item is not fake_pystray.Menu.SEPARATOR]
+        visible_texts = [self._menu_text(item) for item in items if item.visible]
+
+        self.assertTrue(items[0].default)
+        self.assertFalse(items[0].visible)
+        self.assertIn("Show Bubble", visible_texts)
+        self.assertIn("Start Recording", visible_texts)
+        self.assertIn("History", visible_texts)
+        self.assertIn("Settings", visible_texts)
+        self.assertIn("Quit", visible_texts)
+
+    def test_tray_callbacks_schedule_through_tk(self) -> None:
+        calls = []
+
+        class FakeRoot:
+            def after(self, delay_ms, callback):
+                calls.append((delay_ms, callback))
+
+        bubble_dictate.root = FakeRoot()
+
+        bubble_dictate.on_tray_toggle_recording()
+
+        self.assertEqual(calls, [(0, bubble_dictate.toggle_recording_from_shortcut)])
+
+    def test_start_tray_icon_noops_when_pystray_is_unavailable(self) -> None:
+        with patch.object(bubble_dictate, "pystray", None), patch.object(
+            bubble_dictate, "log"
+        ) as log:
+            started = bubble_dictate.start_tray_icon()
+
+        self.assertFalse(started)
+        log.assert_called()
+
+    def test_start_tray_icon_runs_detached_when_available(self) -> None:
+        fake_pystray = self._fake_pystray()
+
+        with patch.object(bubble_dictate, "pystray", fake_pystray):
+            started = bubble_dictate.start_tray_icon()
+
+        self.assertTrue(started)
+        self.assertIsNotNone(bubble_dictate.tray_icon)
+        self.assertEqual(bubble_dictate.tray_icon.run_calls, 1)
+
+    def _fake_pystray(self):
+        class FakeMenu(tuple):
+            SEPARATOR = object()
+
+            def __new__(cls, *items):
+                return tuple.__new__(cls, items)
+
+        class FakeMenuItem:
+            def __init__(
+                self,
+                text,
+                action=None,
+                default=False,
+                visible=True,
+                enabled=True,
+            ) -> None:
+                self.text = text
+                self.action = action
+                self.default = default
+                self.visible = visible
+                self.enabled = enabled
+
+        class FakeIcon:
+            def __init__(self, name, icon=None, title=None, menu=None) -> None:
+                self.name = name
+                self.icon = icon
+                self.title = title
+                self.menu = menu
+                self.run_calls = 0
+                self.stop_calls = 0
+                self.update_menu_calls = 0
+
+            def run_detached(self):
+                self.run_calls += 1
+
+            def stop(self):
+                self.stop_calls += 1
+
+            def update_menu(self):
+                self.update_menu_calls += 1
+
+        return SimpleNamespace(Menu=FakeMenu, MenuItem=FakeMenuItem, Icon=FakeIcon)
+
+    def _menu_text(self, item) -> str:
+        value = item.text
+        if callable(value):
+            return value(item)
+        return value
+
+
+class ShutdownTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        bubble_dictate.shutting_down = False
+        bubble_dictate.mouse_listener = None
+        bubble_dictate.hotkey_listener = None
+        bubble_dictate.audio_stream = None
+        bubble_dictate.tray_icon = None
+        bubble_dictate.root = None
+
+    def test_shutdown_now_stops_hooks_before_hard_exit(self) -> None:
+        calls = []
+
+        class Stopper:
+            def __init__(self, name) -> None:
+                self.name = name
+
+            def stop(self) -> None:
+                calls.append(f"{self.name}.stop")
+
+        class ExitCalled(Exception):
+            pass
+
+        bubble_dictate.mouse_listener = Stopper("mouse")
+        bubble_dictate.hotkey_listener = Stopper("hotkey")
+        bubble_dictate.tray_icon = Stopper("tray")
+        bubble_dictate.audio_stream = Stopper("audio")
+
+        with patch.object(bubble_dictate.os, "_exit", side_effect=ExitCalled), patch.object(
+            bubble_dictate, "log"
+        ):
+            with self.assertRaises(ExitCalled):
+                bubble_dictate.shutdown_now()
+
+        self.assertEqual(
+            calls,
+            ["mouse.stop", "hotkey.stop", "tray.stop", "audio.stop"],
+        )
+        self.assertTrue(bubble_dictate.shutting_down)
+
+    def test_global_mouse_click_returns_during_shutdown(self) -> None:
+        bubble_dictate.shutting_down = True
+
+        with patch.object(bubble_dictate, "click_is_inside_bubble", side_effect=AssertionError):
+            bubble_dictate.on_global_mouse_click(10, 10, bubble_dictate.mouse.Button.left, True)
+
+    def test_hotkey_toggle_returns_during_shutdown(self) -> None:
+        class FakeRoot:
+            def after(self, *_args, **_kwargs) -> None:
+                raise AssertionError("hotkey must not schedule work during shutdown")
+
+        bubble_dictate.shutting_down = True
+        bubble_dictate.root = FakeRoot()
+
+        bubble_dictate.on_hotkey_toggle()
+
+
+if __name__ == "__main__":
+    unittest.main()
