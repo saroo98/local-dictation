@@ -1,5 +1,15 @@
 # Implementation verification
 
+The final branded build is version 0.1.2, checked and installed on 2026-10-04.
+[The logo release evidence](audit-evidence/logo-release-verification.json)
+records exact final artifact identities, supplied icon sizes, executable and
+unpacked-backend path checks, owned startup/shutdown and unchanged personal
+settings/history. The installed main window, idle bubble, sidebar and About
+wordmarks were inspected in light and dark appearance before Computer Use was
+stopped. A drag did not demonstrate a saved move before interruption; its cause
+was not established. Further physical interaction and clean-machine acceptance
+remain unverified. The evidence below describes earlier versions.
+
 Checked on 2026-10-02 in `<repository>`, on the local
 `reliability-fixes` branch. The owner subsequently authorized committing all
 changes and installing the app. Source commit

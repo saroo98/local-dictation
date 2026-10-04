@@ -23,6 +23,8 @@ versions remain subject to the historical privacy gate described in
 
 Current implementation evidence:
 
+- `logo-release-verification.json`: final 0.1.2 branding, build and installed-file
+  identities, unpacked-backend privacy scan and explicit interactive limits.
 - `implementation-verification.json`: pre-commit source/check/artifact metadata
   and runtime-data preservation checks at the end of implementation.
 - `installation-verification.json`: owner-authorized installed upgrade, exact

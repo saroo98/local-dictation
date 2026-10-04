@@ -14,6 +14,7 @@
 | `desktop/src-tauri/src/lib.rs` | Native windows, tray, process ownership and TCP proxy |
 | `desktop/src-tauri/src/windows_native.rs` | Windows job ownership and utility-window activation guard |
 | `scripts/build-backend-sidecar.ps1` | PyInstaller sidecar packaging |
+| `scripts/build-desktop.ps1` | Installer build, compiler path remapping and executable privacy checks |
 
 ## Flow
 
@@ -73,6 +74,8 @@ control protocol or inference engine, split the legacy runtime into speculative
 modules or introduce a framework. Extract code only when a specific behavior
 change benefits from it.
 
-Git history is preserved. Earlier worktrees, caches and copied personal data
-were archived outside the active source folder. `docs/history` contains older
+Commit messages, dates and ordering are preserved. The owner approved replacing
+historical personal paths and Git identities before publication; commit IDs
+changed. The original history is backed up privately. Earlier worktrees, caches
+and copied personal data were archived outside the active source folder. `docs/history` contains older
 notes and design references, not current instructions or validation results.

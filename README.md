@@ -11,10 +11,10 @@ copy the transcript or paste it into a writable field in another app.
 Transcription runs on your computer using faster-whisper, without a cloud
 speech service or an app account.
 
-**Desktop version: 0.1.2.** The Windows installer release is being prepared.
-There are currently no published releases. When available, downloads will be
-listed on the [GitHub releases page](https://github.com/saroo98/local-dictation/releases).
-You can build from source using the instructions below.
+**Desktop version: 0.1.2.** [Download the Windows x64 installer](https://github.com/saroo98/local-dictation/releases/download/v0.1.2/Local.Dictation_0.1.2_x64-setup.exe)
+or open the [release notes and SHA-256 checksum](https://github.com/saroo98/local-dictation/releases/tag/v0.1.2).
+The installer includes CPU support and NVIDIA CUDA libraries, making the
+download approximately 1.43 GB. Speech models are downloaded separately.
 
 ## Features
 
@@ -38,16 +38,17 @@ The desktop package targets Windows x64. You need a working microphone and
 enough memory and disk space for your selected model. CUDA mode also needs a
 compatible NVIDIA GPU and driver. CPU mode does not require an NVIDIA GPU.
 
-1. Open **Models**. Download a model explicitly, or add an existing compatible
+1. Download and run the Windows installer, then open **Local Dictation**.
+2. Open **Models**. Download a model explicitly, or add an existing compatible
    local model. Models are not included in the installer.
-2. In **Settings**, select the downloaded model, your language and device mode,
+3. In **Settings**, select the downloaded model, your language and device mode,
    then save. **Auto** permits CPU fallback; **CUDA** reports a failure if GPU
    loading fails.
-3. Wait for recording resources to become ready. If a model or microphone fails,
+4. Wait for recording resources to become ready. If a model or microphone fails,
    use **Retry resources** on Recording or Help/About after resolving the issue.
-4. Focus the text field where you want to dictate. Click the bubble or press
+5. Focus the text field where you want to dictate. Click the bubble or press
    **Ctrl+Alt+D** to start, speak, then toggle again to stop and transcribe.
-5. When an editable field is still focused, the app attempts automatic paste.
+6. When an editable field is still focused, the app attempts automatic paste.
    Otherwise, click a writable target after transcription. You can also copy
    the completed text from Recording or History.
 
@@ -72,7 +73,7 @@ backend. A shortcut requested during transcription does not interrupt inference.
 
 Private settings, transcripts, exports, credentials, model caches and generated
 build output must stay out of Git. See the [privacy review and release gates](docs/release-preparation.md)
-for the repository scan and historical cleanup still required before publishing.
+for the repository scan, approved history cleanup and its limitations.
 
 ## Build from source
 

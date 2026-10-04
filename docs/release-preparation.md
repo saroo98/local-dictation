@@ -1,8 +1,9 @@
 # Privacy review and release preparation
 
-Checked 2026-10-02. The owner requested meaningful commits and a public release,
-then explicitly limited this phase to local commits while preparing a logo.
-No push, tag, release or upload is authorized in this phase.
+Initial review 2026-10-02. The owner supplied the logo on 2026-10-04 and lifted
+the publication hold by requesting commits, push/merge and installation.
+The owner explicitly approved replacing the reviewed public history on
+2026-10-04, after verification of a private backup and sanitized candidate.
 
 ## Repository privacy review
 
@@ -45,13 +46,13 @@ do not erase data from earlier commits or provide an automatic secret detector.
 
 ## Historical privacy gate
 
-**Publication remains blocked on historical cleanup.** Earlier commits retain
-the original personal paths and author email. The public remote already
-contains personal paths in historical `test_bubble_dictate.py` versions and the
-same author email. A normal new commit or fast-forward push cannot remove them.
-Do not publish the current branch history as private-free.
+Earlier commits contained personal paths and author email. A normal new commit
+cannot remove these values from older versions. The approved cleanup replaces
+affected content and commit identities while preserving messages, dates, order
+and meaningful changes. A private copy of the complete original history was
+verified before any remote replacement.
 
-The smallest complete remedy is:
+The publication procedure is:
 
 1. Preserve and verify a private backup of the complete current Git history
    outside the public checkout.
@@ -61,11 +62,19 @@ The smallest complete remedy is:
 3. Scan every object reachable from the resulting publication branch and
    compare its final tree with the reviewed source. Keep backup refs and raw
    audit records out of the published history.
-4. Obtain explicit owner approval before replacing existing GitHub history.
-   This changes existing commit IDs and requires a remote history replacement,
-   beyond the current permission to make local commits.
+4. Replace remote history only with explicit owner approval and a lease against
+   the expected remote commit. Published commit IDs change; existing clones
+   should be re-cloned.
 
-No history rewrite or remote replacement has been performed in this phase.
+The original public master history was replaced on 2026-10-04 with the approved
+sanitized history. The candidate for the desktop changes preserves all 28
+commit messages, dates, order and topology, with a byte-identical final source
+tree. Every final commit must undergo the same review before pushing.
+
+This changes reachable branch history; it cannot erase old clones or guarantee
+removal of GitHub cached objects. Pattern scans do not establish that every
+possible private value is absent. Commit IDs in dated historical notes refer to
+the original history unless explicitly identified as rewritten IDs.
 
 ## Validation of the current cleanup
 
@@ -85,6 +94,9 @@ remain in [verification.md](verification.md).
 - Rebuild the final Windows installer from the reviewed source and verify its
   contents and checksums. Publish only the intended installer and checksum,
   never local profiles, raw audit backups, model caches or development output.
+- Exclude debug-only repository/Python lookup code from release executables.
+  Use `scripts/build-desktop.ps1` to remap compiler source paths and reject
+  remaining personal build paths in the native and backend executables.
 - Repeat relevant native acceptance after the final build. Keep physical
   interaction and clean-machine checks visibly unverified until exercised.
 - Review release text, version, download links and licensing. The public
@@ -92,6 +104,6 @@ remain in [verification.md](verification.md).
 - Push, tag and publish only after the owner's hold is lifted and any required
   history-replacement authorization is explicit.
 
-The README describes version 0.1.1 and points to the canonical GitHub releases
-page. At this check the public repository had no published releases or tags.
-No downloadable installer release is claimed before publication.
+The final branded product version is 0.1.2. Source, installer and checksum are
+published only after their final validation; the release evidence records
+actual results and outstanding acceptance limits.

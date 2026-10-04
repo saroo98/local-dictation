@@ -1,10 +1,32 @@
 # Implementation status
 
+## Logo, publication and installation
+
+On 2026-10-04 the owner supplied the final logo package and explicitly requested
+logo integration, meaningful commits, push/merge, installation and removal of
+previous installed software. This lifts the earlier logo hold. Personal runtime
+data and recovery backups remain outside the software-removal scope.
+
+| Step | State | Evidence |
+| --- | --- | --- |
+| Verify supplied artwork | complete | All 108 asset hashes and sizes match the supplied manifest; SVGs contain no scripts or external resources |
+| Integrate branding and product version | complete | Supplied native ICO/PNG sizes and SVG interface/README artwork; product version 0.1.2 |
+| Validate source and build installer | complete | Python 192, frontend 85, native 21, lint/typecheck/fmt and final build pass; 15 icon frames match in each executable/installer; native and unpacked backend personal-path checks and owned startup/exit pass |
+| Resolve historical privacy and commit | in progress | Owner approved history replacement; GitHub master now contains the sanitized original history. Private Git bundle verified; candidate preserves 28 commit messages/dates/order and the identical final tree. Final commits require the same scan |
+| Push, merge and publish download | pending | Reviewable source and verified installer only |
+| Upgrade installed software and verify | complete | Final installer exited 0 in 15.578 seconds; installed binaries, 17 CUDA DLLs, 15 icon frames and unchanged settings/history verified. Native light/dark branding and cached CPU readiness observed; physical interaction checks remain incomplete |
+
+On 2026-10-04 the owner stopped Computer Use and requested background work
+without mouse or keyboard control. No further physical input is used. One
+automated bubble drag did not demonstrate a saved move; the interrupted check
+does not establish its cause. Dragging, quick menu, tray interactions and live
+dictation/shortcut acceptance remain unverified for this final build.
+
 ## Public release preparation
 
 The owner requested meaningful commits, README improvements and a privacy
 review on 2026-10-02, then explicitly limited this phase to local commits while
-preparing a logo. Push and release publication are on hold.
+preparing a logo. That historical hold was lifted by the request recorded above.
 
 | Step | State | Evidence |
 | --- | --- | --- |
@@ -12,7 +34,7 @@ preparing a logo. Push and release publication are on hold.
 | Remove private machine details from current files | complete | Synthetic fixtures, relative links and redacted evidence; raw records preserved only in ignored output |
 | Update the public README | complete | Version 0.1.1, voice typing/Whisper description, user workflow, model setup, privacy and build instructions |
 | Validate and commit locally | complete | Privacy cleanup committed as `7e500a4`; README and final status included in the documentation commit. Python 123 and frontend 12 targeted tests, lint/typecheck, 229 document links, 22 JSON files and staged privacy checks pass |
-| Push and publish an installer | on hold | Owner is preparing a logo; historical privacy findings must also be resolved before publication |
+| Push and publish an installer | superseded | Logo and publication follow-up above records the current scope; historical privacy findings must be resolved before publication |
 
 Plan: `docs/implementation-plan.md`. Baseline: `462ce340` plus the preserved,
 uncommitted repository cleanup. Work is local on `reliability-fixes`.
