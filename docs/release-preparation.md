@@ -28,7 +28,7 @@ Confirmed findings:
   versions are covered by the historical privacy gate below.
 - Private chat names and original screenshot/archive locations were removed
   from public notes. Application data defaults remain documented accurately.
-- Existing Git author/committer metadata contains a personal email address.
+- Original Git author/committer metadata contained a personal email address.
   New commits use the repository owner's verified public GitHub identity and
   GitHub noreply address.
 - The scan found no credential-format or credential-assignment matches and no
@@ -67,9 +67,14 @@ The publication procedure is:
    should be re-cloned.
 
 The original public master history was replaced on 2026-10-04 with the approved
-sanitized history. The candidate for the desktop changes preserves all 28
+sanitized history. The final desktop publication preserves all 30 original
 commit messages, dates, order and topology, with a byte-identical final source
-tree. Every final commit must undergo the same review before pushing.
+tree. Its 182 current files and 388 reachable blobs contain no detected private
+paths, owner names, transcript text or credentials. Remaining email matches
+are public advisory links, a synthetic test address and an icon filename.
+Original Git metadata and the verified bundle are retained privately outside
+the public checkout. The merge commit and version tag use the public noreply
+identity too.
 
 This changes reachable branch history; it cannot erase old clones or guarantee
 removal of GitHub cached objects. Pattern scans do not establish that every
@@ -104,6 +109,9 @@ remain in [verification.md](verification.md).
 - Push, tag and publish only after the owner's hold is lifted and any required
   history-replacement authorization is explicit.
 
-The final branded product version is 0.1.2. Source, installer and checksum are
-published only after their final validation; the release evidence records
-actual results and outstanding acceptance limits.
+The final branded product version is 0.1.2. [PR #1](https://github.com/saroo98/local-dictation/pull/1)
+was merged, and the [Windows release](https://github.com/saroo98/local-dictation/releases/tag/v0.1.2)
+was published on 2026-10-04 after verifying both uploaded files against local
+SHA-256 values and sizes. The installer is unsigned. Detailed
+[artifact and installation evidence](audit-evidence/logo-release-verification.json)
+retains the outstanding interaction and clean-machine acceptance limits.

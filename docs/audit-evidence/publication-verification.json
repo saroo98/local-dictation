@@ -1,0 +1,49 @@
+{
+  "checked_on": "2026-10-04",
+  "version": "0.1.2",
+  "release_url": "https://github.com/saroo98/local-dictation/releases/tag/v0.1.2",
+  "published_at": "2026-10-04T14:28:03Z",
+  "draft": false,
+  "release_commit": "e9804c419096579e63d8e9c1a0dca44dda9479f2",
+  "pull_request": {
+    "mergeCommit": {
+      "oid": "e9804c419096579e63d8e9c1a0dca44dda9479f2"
+    },
+    "mergedAt": "2026-10-04T14:24:07Z",
+    "state": "MERGED",
+    "url": "https://github.com/saroo98/local-dictation/pull/1"
+  },
+  "assets": [
+    {
+      "name": "Local.Dictation_0.1.2_x64-setup.exe",
+      "size": 1426143850,
+      "digest": "sha256:fdbf481ba637a34aefc78ef4445eec97fefa0fb56e58be13a15a783c6ad72f09",
+      "state": "uploaded",
+      "url": "https://github.com/saroo98/local-dictation/releases/download/v0.1.2/Local.Dictation_0.1.2_x64-setup.exe"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 103,
+      "digest": "sha256:62f0af68e325859e54625d35515cc32d0daa3ad691cf69c729e9ad22c5316ce2",
+      "state": "uploaded",
+      "url": "https://github.com/saroo98/local-dictation/releases/download/v0.1.2/SHA256SUMS"
+    }
+  ],
+  "uploaded_sizes_and_sha256_match_local_files": true,
+  "public_checksum_download_matches": true,
+  "public_installer_head_status": 200,
+  "public_installer_content_length_matches": true,
+  "installer_authenticode": "NotSigned",
+  "sanitized_original_history": {
+    "commits_preserved": 30,
+    "messages_dates_order_topology_preserved": true,
+    "reviewed_final_tree_unchanged": true,
+    "reachable_blobs_scanned": 388,
+    "current_files_scanned": 182,
+    "personal_path_owner_transcript_credential_matches": 0
+  },
+  "private_original_bundle_and_git_metadata_preserved": true,
+  "privacy_limits": "Pattern scans cannot identify every possible secret; old clones and GitHub cached objects are outside the published branch.",
+  "physical_input_used_for_background_publication": false,
+  "passed": true
+}

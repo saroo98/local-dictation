@@ -12,8 +12,8 @@ data and recovery backups remain outside the software-removal scope.
 | Verify supplied artwork | complete | All 108 asset hashes and sizes match the supplied manifest; SVGs contain no scripts or external resources |
 | Integrate branding and product version | complete | Supplied native ICO/PNG sizes and SVG interface/README artwork; product version 0.1.2 |
 | Validate source and build installer | complete | Python 192, frontend 85, native 21, lint/typecheck/fmt and final build pass; 15 icon frames match in each executable/installer; native and unpacked backend personal-path checks and owned startup/exit pass |
-| Resolve historical privacy and commit | in progress | Owner approved history replacement; GitHub master now contains the sanitized original history. Private Git bundle verified; candidate preserves 28 commit messages/dates/order and the identical final tree. Final commits require the same scan |
-| Push, merge and publish download | pending | Reviewable source and verified installer only |
+| Resolve historical privacy and commit | complete | Approved sanitized history adopted locally; original bundle and Git metadata retained privately. All 30 commit messages/dates/order/topology and final source tree preserved; 182 current files and 388 reachable blobs scanned without private-path, owner, transcript or credential matches |
+| Push, merge and publish download | complete | [PR #1](https://github.com/saroo98/local-dictation/pull/1) merged as `e9804c4`; [version 0.1.2](https://github.com/saroo98/local-dictation/releases/tag/v0.1.2) is public with the installer and SHA256SUMS. GitHub asset sizes/digests match verified local files |
 | Upgrade installed software and verify | complete | Final installer exited 0 in 15.578 seconds; installed binaries, 17 CUDA DLLs, 15 icon frames and unchanged settings/history verified. Native light/dark branding and cached CPU readiness observed; physical interaction checks remain incomplete |
 
 On 2026-10-04 the owner stopped Computer Use and requested background work
@@ -36,8 +36,9 @@ preparing a logo. That historical hold was lifted by the request recorded above.
 | Validate and commit locally | complete | Privacy cleanup committed as `7e500a4`; README and final status included in the documentation commit. Python 123 and frontend 12 targeted tests, lint/typecheck, 229 document links, 22 JSON files and staged privacy checks pass |
 | Push and publish an installer | superseded | Logo and publication follow-up above records the current scope; historical privacy findings must be resolved before publication |
 
-Plan: `docs/implementation-plan.md`. Baseline: `462ce340` plus the preserved,
-uncommitted repository cleanup. Work is local on `reliability-fixes`.
+Original plan: `docs/implementation-plan.md`. Baseline: `462ce340` plus the
+preserved repository cleanup. Implementation began on `reliability-fixes`;
+the final published source is now on `master`.
 
 Completion requires regression evidence, the relevant existing checks, a final
 review, and explicit accounting for native and packaged checks. No claim of
@@ -52,8 +53,8 @@ available checks while another application retained foreground.
 
 On 2026-10-02 the owner explicitly requested committing all project changes and
 installing the rebuilt app. This superseded the earlier local-only/no-install
-scope. At that phase publishing and pushing were not requested; the current
-release-preparation scope above explicitly holds both actions.
+scope. At that phase publishing and pushing were not requested; the later logo
+and publication request superseded that limit.
 
 | Step | State | Evidence |
 | --- | --- | --- |

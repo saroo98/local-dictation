@@ -10,9 +10,9 @@ Affected JSON records list their `privacy_redactions`. `<repository>` means
 the source root; `%LOCALAPPDATA%`, `%APPDATA%` and `%USERPROFILE%` are portable
 Windows path descriptions. These are sanitized reports of the original checks,
 not fresh test runs. Separate full copies are retained in ignored local build
-output and must not be packaged or published. Original records in older Git
-versions remain subject to the historical privacy gate described in
-`../release-preparation.md`.
+output and must not be packaged or published. Original private records are
+retained outside the public checkout; the approved history cleanup is described
+in `../release-preparation.md`.
 
 - `cleanup-manifest.json`: source moves, preserved archive and compatibility scope.
 - `validation.json`: checks actually run, browser measurements and the native compiler memory blocker.
@@ -25,6 +25,8 @@ Current implementation evidence:
 
 - `logo-release-verification.json`: final 0.1.2 branding, build and installed-file
   identities, unpacked-backend privacy scan and explicit interactive limits.
+- `publication-verification.json`: merged source/tag, public release asset
+  identities, checksum download and installer HTTP checks.
 - `implementation-verification.json`: pre-commit source/check/artifact metadata
   and runtime-data preservation checks at the end of implementation.
 - `installation-verification.json`: owner-authorized installed upgrade, exact
